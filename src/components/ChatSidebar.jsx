@@ -13,7 +13,13 @@ function ChatSidebar({
   cancelTransfer,
   formatBytes,
   formatSpeed,
-  disconnect
+  disconnect,
+  videoCallActive,
+  videoCallStatus,
+  startVideoCall,
+  endVideoCall,
+  localVideoRef,
+  remoteVideoRef
 }) {
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -51,18 +57,24 @@ function ChatSidebar({
           >
             Files
           </button>
+          <button 
+            className={`tab-btn ${activeTab === 'video' ? 'active' : ''}`}
+            onClick={() => setActiveTab('video')}
+          >
+            Video Call
+          </button>
         </div>
         <div className="header-actions">
-          <div className="connection-indicator">
+          <div className="connection-indicator subtle">
             <div className="status-dot connected"></div>
-            <span>Connected</span>
+            
           </div>
           <button 
-            className="disconnect-btn"
+            className="disconnect-btn subtle"
             onClick={disconnect}
             title="Disconnect"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path>
               <line x1="23" y1="1" x2="1" y2="23"></line>
             </svg>
@@ -190,6 +202,79 @@ function ChatSidebar({
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'video' && (
+          <div className="video-call-section">
+            <div className="video-call-header">
+              <h3>Video Call</h3>
+              <p>Start a video call with your peer</p>
+            </div>
+            
+            {!videoCallActive ? (
+              <div className="video-call-controls">
+                <button 
+                  className="video-call-btn start-call"
+                  onClick={startVideoCall}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 7l-7 5 7 5V7z"></path>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                  </svg>
+                  Start Video Call
+                </button>
+              </div>
+            ) : (
+              <div className="video-call-active">
+                <div className="video-call-videos">
+                  <div className="local-video">
+                    <video 
+                      ref={localVideoRef}
+                      autoPlay 
+                      muted 
+                      playsInline
+                      className="video-call-local"
+                    />
+                    <div className="video-label">You</div>
+                  </div>
+                  
+                  <div className="remote-video">
+                    <video 
+                      ref={remoteVideoRef}
+                      autoPlay 
+                      playsInline
+                      className="video-call-remote"
+                    />
+                    <div className="video-label">Remote</div>
+                  </div>
+                </div>
+                
+                <div className="video-call-controls">
+                  <button 
+                    className="video-call-btn end-call"
+                    onClick={endVideoCall}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path>
+                      <line x1="23" y1="1" x2="1" y2="23"></line>
+                    </svg>
+                    End Call
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="video-call-status">
+              <div className="status-item">
+                <span className="status-label">Status:</span>
+                <span className="status-value">{videoCallStatus}</span>
+              </div>
+              <div className="status-item">
+                <span className="status-label">Connection:</span>
+                <span className="status-value">WebRTC</span>
+              </div>
             </div>
           </div>
         )}

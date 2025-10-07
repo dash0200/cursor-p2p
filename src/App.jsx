@@ -186,6 +186,18 @@ function App() {
             console.log('📨 Processing video sync message')
             console.log('📨 VIDEO SYNC MSG RECEIVED:', data)
             handleVideoSync(data)
+          } else if (data.type === 'video_call_offer') {
+            console.log('📨 Processing video call offer')
+            handleVideoCallOffer(data.offer)
+          } else if (data.type === 'video_call_answer') {
+            console.log('📨 Processing video call answer')
+            handleVideoCallAnswer(data.answer)
+          } else if (data.type === 'video_call_ice') {
+            console.log('📨 Processing video call ICE candidate')
+            handleVideoCallICE(data.candidate)
+          } else if (data.type === 'video_call_end') {
+            console.log('📨 Processing video call end')
+            handleVideoCallEnd()
           } else if (data.type === 'file-offer') {
             // Offer to send a file; receiver chooses save location and replies with accept and start offset
             handleIncomingFileOffer(data)
@@ -330,6 +342,41 @@ function App() {
     })
     
     console.log('📡 All queued events processed')
+  }
+
+  // Video call handlers
+  const handleVideoCallOffer = async (offer) => {
+    try {
+      console.log('📞 Handling video call offer')
+      // This would be implemented in ConnectedPage
+      addMessage('system', '📞 Incoming video call...')
+    } catch (error) {
+      console.error('Error handling video call offer:', error)
+    }
+  }
+
+  const handleVideoCallAnswer = async (answer) => {
+    try {
+      console.log('📞 Handling video call answer')
+      // This would be implemented in ConnectedPage
+    } catch (error) {
+      console.error('Error handling video call answer:', error)
+    }
+  }
+
+  const handleVideoCallICE = async (candidate) => {
+    try {
+      console.log('📞 Handling video call ICE candidate')
+      // This would be implemented in ConnectedPage
+    } catch (error) {
+      console.error('Error handling video call ICE:', error)
+    }
+  }
+
+  const handleVideoCallEnd = () => {
+    console.log('📞 Handling video call end')
+    addMessage('system', '📞 Video call ended by remote peer')
+    // This would be implemented in ConnectedPage
   }
 
   const sendVideoSync = (action, data) => {

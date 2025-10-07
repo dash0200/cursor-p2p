@@ -25,6 +25,21 @@ function VideoPlayer({
   const videoContainerRef = useRef(null)
   const isSyncingRef = useRef(false)
 
+  // Helper function to format time in readable format
+  const formatTimeReadable = (timeInSeconds) => {
+    const hours = Math.floor(timeInSeconds / 3600)
+    const minutes = Math.floor((timeInSeconds % 3600) / 60)
+    const seconds = timeInSeconds % 60
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${seconds.toFixed(1)}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds.toFixed(1)}s`
+    } else {
+      return `${seconds.toFixed(1)}s`
+    }
+  }
+
   // Helper function to log video actions to chat
   const logVideoAction = (who, action, source, currentTime, duration, targetTime = null) => {
     if (!addMessage) return
@@ -32,11 +47,12 @@ function VideoPlayer({
     const timestamp = new Date().toLocaleTimeString()
     const progress = duration ? `${((currentTime / duration) * 100).toFixed(1)}%` : '0%'
     
-    let message = `🎬 ${who} ${action} at ${currentTime.toFixed(1)}s (${progress})`
+    let message = `🎬 ${who} ${action} at ${formatTimeReadable(currentTime)} (${progress})`
     
     if (targetTime !== null) {
       const timeDiff = targetTime - currentTime
-      message += ` → ${targetTime.toFixed(1)}s (${timeDiff > 0 ? '+' : ''}${timeDiff.toFixed(1)}s)`
+      const timeDiffFormatted = timeDiff > 0 ? `+${formatTimeReadable(timeDiff)}` : `-${formatTimeReadable(Math.abs(timeDiff))}`
+      message += ` → ${formatTimeReadable(targetTime)} (${timeDiffFormatted})`
     }
     
     if (source) {
