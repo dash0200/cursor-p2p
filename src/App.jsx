@@ -19,7 +19,8 @@ function App() {
   const [remoteIceCandidates, setRemoteIceCandidates] = useState([])
   const [signalingState, setSignalingState] = useState('stable')
   const [fileTransfers, setFileTransfers] = useState([]) // history entries
-  const [videoSyncHandlers, setVideoSyncHandlers] = useState({}) // { onPlayPause, onSeek }
+  const videoSyncHandlersRef = useRef({}) // { onPlayPause, onSeek }
+  const pendingSyncEventsRef = useRef([]) // Array of queued sync events
   const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window
   
   const messagesEndRef = useRef(null)
@@ -141,7 +142,7 @@ function App() {
     return pc
   }
 
-  const setupDataChannel = (channel) => {
+  const setupDataChannel = (channel) => {    
     // Configure backpressure threshold for smoother sending
     try {
       channel.bufferedAmountLowThreshold = 512 * 1024 // 512KB
@@ -172,6 +173,7 @@ function App() {
       }
       // Handle string-based protocol messages (JSON)
       if (typeof event.data === 'string') {
+       
         try {
           const data = JSON.parse(event.data)
           console.log('📨 RAW MESSAGE RECEIVED:', event.data)
@@ -256,25 +258,78 @@ function App() {
   // Video sync functions
   const handleVideoSync = (data) => {
     console.log('📡 SYNC MESSAGE RECEIVED:', data)
-    console.log('📡 Sync handlers available:', {
-      onPlayPause: !!videoSyncHandlers.onPlayPause,
-      onSeek: !!videoSyncHandlers.onSeek
+    console.log('📡 Current handlers:', {
+      onPlayPause: !!videoSyncHandlersRef.current.onPlayPause,
+      onSeek: !!videoSyncHandlersRef.current.onSeek
     })
+    
+    // Check if handlers are available
+    const handlers = videoSyncHandlersRef.current
+    const hasHandlers = handlers.onPlayPause && handlers.onSeek
+    
+    if (!hasHandlers) {
+      console.log('📡 Handlers not ready - queuing sync event')
+      pendingSyncEventsRef.current.push(data)
+      console.log('📡 Queued events count:', pendingSyncEventsRef.current.length)
+      return
+    }
+    
+    // Process the sync event immediately
+    console.log('📡 Processing sync event immediately')
+    processSyncEvent(data)
+  }
+
+  const processSyncEvent = (data) => {
+    console.log('📡 Processing sync event:', data)
+    const handlers = videoSyncHandlersRef.current
+    
     if (data.action === 'play_pause') {
       console.log('📡 Calling onPlayPause handler with:', data.isPlaying)
-      if (videoSyncHandlers.onPlayPause) {
-        videoSyncHandlers.onPlayPause(data.isPlaying)
+      if (handlers.onPlayPause) {
+        handlers.onPlayPause(data.isPlaying)
+        console.log('📡 onPlayPause handler called successfully')
       } else {
-        console.log('📡 ERROR: onPlayPause handler not available')
+        console.log('📡 ERROR: onPlayPause handler not available during processing')
       }
     } else if (data.action === 'seek') {
       console.log('📡 Calling onSeek handler with:', data.time)
-      if (videoSyncHandlers.onSeek) {
-        videoSyncHandlers.onSeek(data.time)
+      if (handlers.onSeek) {
+        handlers.onSeek(data.time)
+        console.log('📡 onSeek handler called successfully')
       } else {
-        console.log('📡 ERROR: onSeek handler not available')
+        console.log('📡 ERROR: onSeek handler not available during processing')
       }
+    } else {
+      console.log('📡 Unknown sync action:', data.action)
     }
+  }
+
+  const flushPendingSyncEvents = () => {
+    console.log('📡 Flushing pending sync events, count:', pendingSyncEventsRef.current.length)
+    
+    if (pendingSyncEventsRef.current.length === 0) {
+      console.log('📡 No pending events to flush')
+      return
+    }
+    
+    const handlers = videoSyncHandlersRef.current
+    const hasHandlers = handlers.onPlayPause && handlers.onSeek
+    
+    if (!hasHandlers) {
+      console.log('📡 Handlers still not ready, keeping events queued')
+      return
+    }
+    
+    console.log('📡 Processing all queued events')
+    const eventsToProcess = [...pendingSyncEventsRef.current]
+    pendingSyncEventsRef.current = []
+    
+    eventsToProcess.forEach((event, index) => {
+      console.log(`📡 Processing queued event ${index + 1}/${eventsToProcess.length}:`, event)
+      processSyncEvent(event)
+    })
+    
+    console.log('📡 All queued events processed')
   }
 
   const sendVideoSync = (action, data) => {
@@ -911,7 +966,8 @@ function App() {
         formatSpeed={formatSpeed}
         disconnect={disconnect}
         sendVideoSync={sendVideoSync}
-        setVideoSyncHandlers={setVideoSyncHandlers}
+        videoSyncHandlersRef={videoSyncHandlersRef}
+        flushPendingSyncEvents={flushPendingSyncEvents}
         testDataChannel={testDataChannel}
         testVideoSync={testVideoSync}
       />

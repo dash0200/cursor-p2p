@@ -18,7 +18,8 @@ function ConnectedPage({
   formatSpeed,
   disconnect,
   sendVideoSync,
-  setVideoSyncHandlers
+  videoSyncHandlersRef,
+  flushPendingSyncEvents
 }) {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -49,13 +50,14 @@ function ConnectedPage({
     }
   }
 
-  const handleSeek = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const clickX = e.clientX - rect.left
-    const newTime = (clickX / rect.width) * duration
+  const handleSeek = (time) => {
+    console.log('🎬 ConnectedPage handleSeek called with time:', time)
     if (videoRef.current) {
-      videoRef.current.currentTime = newTime
-      setCurrentTime(newTime)
+      videoRef.current.currentTime = time
+      setCurrentTime(time)
+      console.log('🎬 Video currentTime set to:', time)
+    } else {
+      console.log('🎬 ERROR: videoRef.current not available')
     }
   }
 
@@ -85,7 +87,8 @@ function ConnectedPage({
             handleSeek={handleSeek}
             formatTime={formatTime}
             sendVideoSync={sendVideoSync}
-            setVideoSyncHandlers={setVideoSyncHandlers}
+            videoSyncHandlersRef={videoSyncHandlersRef}
+            flushPendingSyncEvents={flushPendingSyncEvents}
           />
         </div>
 
