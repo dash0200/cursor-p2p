@@ -968,8 +968,7 @@ function App() {
         sendVideoSync={sendVideoSync}
         videoSyncHandlersRef={videoSyncHandlersRef}
         flushPendingSyncEvents={flushPendingSyncEvents}
-        testDataChannel={testDataChannel}
-        testVideoSync={testVideoSync}
+        addMessage={addMessage}
       />
     )
   }

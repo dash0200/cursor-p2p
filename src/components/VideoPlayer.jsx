@@ -15,7 +15,8 @@ function VideoPlayer({
   formatTime,
   sendVideoSync,
   videoSyncHandlersRef,
-  flushPendingSyncEvents
+  flushPendingSyncEvents,
+  addMessage
 }) {
   const [volume, setVolume] = useState(1)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -23,6 +24,27 @@ function VideoPlayer({
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
   const videoContainerRef = useRef(null)
   const isSyncingRef = useRef(false)
+
+  // Helper function to log video actions to chat
+  const logVideoAction = (who, action, source, currentTime, duration, targetTime = null) => {
+    if (!addMessage) return
+    
+    const timestamp = new Date().toLocaleTimeString()
+    const progress = duration ? `${((currentTime / duration) * 100).toFixed(1)}%` : '0%'
+    
+    let message = `🎬 ${who} ${action} at ${currentTime.toFixed(1)}s (${progress})`
+    
+    if (targetTime !== null) {
+      const timeDiff = targetTime - currentTime
+      message += ` → ${targetTime.toFixed(1)}s (${timeDiff > 0 ? '+' : ''}${timeDiff.toFixed(1)}s)`
+    }
+    
+    if (source) {
+      message += ` [${source}]`
+    }
+    
+    addMessage('system', message)
+  }
 
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value)
@@ -78,6 +100,7 @@ function VideoPlayer({
   }
 
   const handleMouseLeave = () => {
+    console.log('🎬 Mouse left video container - hiding controls')
     setShowControls(false)
   }
 
@@ -92,6 +115,8 @@ function VideoPlayer({
 
     switch (e.code) {
       case 'Space':
+        const currentTime = videoRef.current?.currentTime || 0
+        logVideoAction('You', isPlaying ? 'paused' : 'played', 'Space Bar', currentTime, duration)
         handleTogglePlayPause()
         break
       case 'ArrowUp':
@@ -106,13 +131,13 @@ function VideoPlayer({
         break
       case 'ArrowLeft':
         const seekLeft = Math.max(0, currentTime - 10)
-        console.log('🎬 Arrow Left pressed - seeking left to:', seekLeft)
-        handleSeekWithSync(seekLeft)
+        logVideoAction('You', 'seeked', 'Arrow Left', currentTime, duration, seekLeft)
+        handleSeekWithSync(seekLeft, 'Arrow Left Key')
         break
       case 'ArrowRight':
         const seekRight = Math.min(duration, currentTime + 10)
-        console.log('🎬 Arrow Right pressed - seeking right to:', seekRight)
-        handleSeekWithSync(seekRight)
+        logVideoAction('You', 'seeked', 'Arrow Right', currentTime, duration, seekRight)
+        handleSeekWithSync(seekRight, 'Arrow Right Key')
         break
       default:
         break
@@ -135,14 +160,16 @@ function VideoPlayer({
     
     // Register the sync handlers
     const onPlayPause = (isPlaying) => {
-      console.log('🎬 SYNC RECEIVED - Play/Pause:', isPlaying)
-      console.log('🎬 Video element exists:', !!videoRef.current)
-      console.log('🎬 Currently syncing:', isSyncingRef.current)
+      const currentTime = videoRef.current?.currentTime || 0
+      logVideoAction('Remote', isPlaying ? 'played' : 'paused', 'Sync', currentTime, duration)
       
       if (videoRef.current && !isSyncingRef.current) {
         isSyncingRef.current = true
-        console.log('🎬 Applying sync - setting video to:', isPlaying ? 'PLAY' : 'PAUSE')
         
+        // Update React state first
+        setIsPlaying(isPlaying)
+        
+        // Then update video element
         if (isPlaying) {
           videoRef.current.play()
         } else {
@@ -151,30 +178,22 @@ function VideoPlayer({
         
         setTimeout(() => {
           isSyncingRef.current = false
-          console.log('🎬 Sync operation completed')
         }, 100)
-      } else {
-        console.log('🎬 Sync skipped - video not ready or already syncing')
       }
     }
 
     const onSeek = (time) => {
-      console.log('🎬 SYNC RECEIVED - Seek to:', time)
-      console.log('🎬 Video element exists:', !!videoRef.current)
-      console.log('🎬 Currently syncing:', isSyncingRef.current)
+      const currentTime = videoRef.current?.currentTime || 0
+      logVideoAction('Remote', 'seeked', 'Sync', currentTime, duration, time)
       
       if (videoRef.current && !isSyncingRef.current) {
         isSyncingRef.current = true
-        console.log('🎬 Applying sync - seeking to:', time)
         
         videoRef.current.currentTime = time
         
         setTimeout(() => {
           isSyncingRef.current = false
-          console.log('🎬 Seek sync operation completed')
         }, 100)
-      } else {
-        console.log('🎬 Seek sync skipped - video not ready or already syncing')
       }
     }
 
@@ -200,38 +219,28 @@ function VideoPlayer({
   // Enhanced toggle play/pause with sync
   const handleTogglePlayPause = () => {
     const newPlayingState = !isPlaying
-    console.log('🎬 VIDEO CLICKED - Current state:', isPlaying, 'New state:', newPlayingState)
-    console.log('🎬 SendVideoSync function available:', !!sendVideoSync)
+    const currentTime = videoRef.current?.currentTime || 0
+    logVideoAction('You', isPlaying ? 'paused' : 'played', 'Video Click', currentTime, duration)
+    
     togglePlayPause()
     if (sendVideoSync) {
-      console.log('🎬 Sending sync message for play/pause:', newPlayingState)
       sendVideoSync('play_pause', { isPlaying: newPlayingState })
-    } else {
-      console.log('🎬 ERROR: sendVideoSync function not available')
     }
   }
 
   // Enhanced seek with sync
-  const handleSeekWithSync = (time) => {
-    console.log('🎬 SEEK REQUESTED - Time:', time, 'Duration:', duration)
-    console.log('🎬 Current time before seek:', currentTime)
-    console.log('🎬 HandleSeek function available:', !!handleSeek)
-    console.log('🎬 SendVideoSync function available:', !!sendVideoSync)
+  const handleSeekWithSync = (time, source = 'Unknown') => {
+    const currentTime = videoRef.current?.currentTime || 0
+    logVideoAction('You', 'seeked', source, currentTime, duration, time)
     
     // Apply seek locally first
     if (handleSeek) {
       handleSeek(time)
-      console.log('🎬 Local seek applied')
-    } else {
-      console.log('🎬 ERROR: handleSeek function not available')
     }
     
     // Send sync message
     if (sendVideoSync) {
-      console.log('🎬 Sending seek sync message:', time)
       sendVideoSync('seek', { time })
-    } else {
-      console.log('🎬 ERROR: sendVideoSync function not available')
     }
   }
 
@@ -251,12 +260,18 @@ function VideoPlayer({
             onTimeUpdate={handleTimeUpdate}
             onPlay={() => {
               if (!isSyncingRef.current) {
+                console.log('🎬 Video play event - updating state to true')
                 setIsPlaying(true)
+              } else {
+                console.log('🎬 Video play event - ignoring (syncing)')
               }
             }}
             onPause={() => {
               if (!isSyncingRef.current) {
+                console.log('🎬 Video pause event - updating state to false')
                 setIsPlaying(false)
+              } else {
+                console.log('🎬 Video pause event - ignoring (syncing)')
               }
             }}
             onClick={handleTogglePlayPause}
@@ -310,7 +325,11 @@ function VideoPlayer({
             <div className="video-controls">
               <button 
                 className="control-btn play-pause"
-                onClick={handleTogglePlayPause}
+                onClick={() => {
+                  const currentTime = videoRef.current?.currentTime || 0
+                  logVideoAction('You', isPlaying ? 'paused' : 'played', 'Play/Pause Button', currentTime, duration)
+                  handleTogglePlayPause()
+                }}
                 title={isPlaying ? 'Pause' : 'Play'}
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -334,9 +353,9 @@ function VideoPlayer({
                 const clickX = e.clientX - rect.left
                 const percentage = clickX / rect.width
                 const newTime = percentage * duration
-                console.log('🎬 Progress bar clicked - seeking to:', newTime)
-                console.log('🎬 Click position:', clickX, 'Width:', rect.width, 'Percentage:', percentage)
-                handleSeekWithSync(newTime)
+                const currentTime = videoRef.current?.currentTime || 0
+                logVideoAction('You', 'seeked', 'Progress Bar', currentTime, duration, newTime)
+                handleSeekWithSync(newTime, 'Progress Bar Click')
               }}>
                 <div className="progress-bar">
                   <div 

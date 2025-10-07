@@ -19,7 +19,8 @@ function ConnectedPage({
   disconnect,
   sendVideoSync,
   videoSyncHandlersRef,
-  flushPendingSyncEvents
+  flushPendingSyncEvents,
+  addMessage
 }) {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -89,6 +90,7 @@ function ConnectedPage({
             sendVideoSync={sendVideoSync}
             videoSyncHandlersRef={videoSyncHandlersRef}
             flushPendingSyncEvents={flushPendingSyncEvents}
+            addMessage={addMessage}
           />
         </div>
 

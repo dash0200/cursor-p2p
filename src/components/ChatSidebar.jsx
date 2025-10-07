@@ -13,9 +13,7 @@ function ChatSidebar({
   cancelTransfer,
   formatBytes,
   formatSpeed,
-  disconnect,
-  testDataChannel,
-  testVideoSync
+  disconnect
 }) {
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -59,25 +57,6 @@ function ChatSidebar({
             <div className="status-dot connected"></div>
             <span>Connected</span>
           </div>
-          <button 
-            className="test-btn"
-            onClick={testDataChannel}
-            title="Test Data Channel"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 12l2 2 4-4"></path>
-              <circle cx="12" cy="12" r="10"></circle>
-            </svg>
-          </button>
-          <button 
-            className="test-video-btn"
-            onClick={testVideoSync}
-            title="Test Video Sync"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="5,3 19,12 5,21"></polygon>
-            </svg>
-          </button>
           <button 
             className="disconnect-btn"
             onClick={disconnect}
