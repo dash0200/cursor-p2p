@@ -47,8 +47,8 @@
 }
 
 .status-indicator.connected {
-  background: #4ade80;
-  box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+  background: #1e40af;
+  box-shadow: 0 0 10px rgba(30, 64, 175, 0.5);
 }
 
 .status-indicator.connecting {
@@ -345,18 +345,26 @@
   background: #1a1a1a;
   color: #e0e0e0;
   padding: 0.75rem 1rem;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  border-radius: 16px;
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.3),
+    -8px -8px 16px rgba(255, 255, 255, 0.05);
   z-index: 1000;
-  border: 1px solid #2a2a2a;
+  border: none;
 }
 
 .toast.success {
-  border-color: rgba(74, 222, 128, 0.4);
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.3),
+    -8px -8px 16px rgba(255, 255, 255, 0.05),
+    0 0 0 2px rgba(30, 64, 175, 0.3);
 }
 
 .toast.error {
-  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.3),
+    -8px -8px 16px rgba(255, 255, 255, 0.05),
+    0 0 0 2px rgba(239, 68, 68, 0.3);
 }
 
 /* Connection Status Display */

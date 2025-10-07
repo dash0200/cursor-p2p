@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import ConnectedPage from './components/ConnectedPage'
 import './App.css'
 
 function App() {
@@ -18,12 +19,14 @@ function App() {
   const [remoteIceCandidates, setRemoteIceCandidates] = useState([])
   const [signalingState, setSignalingState] = useState('stable')
   const [fileTransfers, setFileTransfers] = useState([]) // history entries
+  const [videoSyncHandlers, setVideoSyncHandlers] = useState({}) // { onPlayPause, onSeek }
   const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window
   
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const iceCandidateBuffer = useRef([])
   const isGatheringComplete = useRef(false)
+  const messageIdCounter = useRef(0)
   const incomingFilesRef = useRef(new Map()) // id -> { name, size, chunkSize, receivedBytes, expectedSeq, handle, writable, writer, runningCrc32, lastMeasureTime, lastMeasuredBytes }
   const sendingFilesRef = useRef(new Map()) // id -> { file, chunkSize, reader, offset, seq, runningCrc32, abortController, lastMeasureTime, lastMeasuredBytes, canceled }
 
@@ -128,6 +131,7 @@ function App() {
     }
 
     pc.ondatachannel = (event) => {
+      console.log('📡 RECEIVING DATA CHANNEL')
       const channel = event.channel
       setDataChannel(channel)
       setupDataChannel(channel)
@@ -143,18 +147,25 @@ function App() {
       channel.bufferedAmountLowThreshold = 512 * 1024 // 512KB
     } catch (_) {}
     channel.onopen = () => {
+      console.log('📡 DATA CHANNEL OPENED')
       setConnectionStatus('connected')
       addMessage('system', 'Data channel opened - ready to chat!')
     }
 
     channel.onmessage = async (event) => {
+      console.log('📨 DATA CHANNEL MESSAGE RECEIVED')
+      console.log('📨 MSG RECEIVED - Event data type:', typeof event.data)
+      console.log('📨 MSG RECEIVED - Event data:', event.data)
+      
       // Binary chunks (ArrayBuffer) for file data
       if (event.data instanceof ArrayBuffer) {
+        console.log('📨 Processing binary data (ArrayBuffer)')
         handleIncomingBinaryChunk(event.data)
         return
       }
       // Some browsers deliver as Blob
       if (event.data instanceof Blob) {
+        console.log('📨 Processing binary data (Blob)')
         const buf = await event.data.arrayBuffer()
         handleIncomingBinaryChunk(buf)
         return
@@ -163,8 +174,16 @@ function App() {
       if (typeof event.data === 'string') {
         try {
           const data = JSON.parse(event.data)
+          console.log('📨 RAW MESSAGE RECEIVED:', event.data)
+          console.log('📨 PARSED MESSAGE:', data)
           if (data.type === 'message') {
+            console.log('📨 Processing chat message')
+            console.log('📨 MSG RECEIVED:', data.message)
             addMessage('remote', data.message)
+          } else if (data.type === 'video_sync') {
+            console.log('📨 Processing video sync message')
+            console.log('📨 VIDEO SYNC MSG RECEIVED:', data)
+            handleVideoSync(data)
           } else if (data.type === 'file-offer') {
             // Offer to send a file; receiver chooses save location and replies with accept and start offset
             handleIncomingFileOffer(data)
@@ -210,6 +229,8 @@ function App() {
             addMessage('system', `Transfer canceled by peer${reason ? `: ${reason}` : ''}`)
           }
         } catch (e) {
+          console.log('📨 JSON PARSE ERROR:', e)
+          console.log('📨 Raw data that failed to parse:', event.data)
           // plain text fallback
           addMessage('remote', event.data)
         }
@@ -224,12 +245,84 @@ function App() {
 
   const addMessage = (sender, text) => {
     const message = {
-      id: Date.now(),
+      id: `msg_${Date.now()}_${++messageIdCounter.current}_${Math.random().toString(36).substr(2, 9)}`,
       sender,
       text,
       timestamp: new Date().toLocaleTimeString()
     }
     setMessages(prev => [...prev, message])
+  }
+
+  // Video sync functions
+  const handleVideoSync = (data) => {
+    console.log('📡 SYNC MESSAGE RECEIVED:', data)
+    console.log('📡 Sync handlers available:', {
+      onPlayPause: !!videoSyncHandlers.onPlayPause,
+      onSeek: !!videoSyncHandlers.onSeek
+    })
+    if (data.action === 'play_pause') {
+      console.log('📡 Calling onPlayPause handler with:', data.isPlaying)
+      if (videoSyncHandlers.onPlayPause) {
+        videoSyncHandlers.onPlayPause(data.isPlaying)
+      } else {
+        console.log('📡 ERROR: onPlayPause handler not available')
+      }
+    } else if (data.action === 'seek') {
+      console.log('📡 Calling onSeek handler with:', data.time)
+      if (videoSyncHandlers.onSeek) {
+        videoSyncHandlers.onSeek(data.time)
+      } else {
+        console.log('📡 ERROR: onSeek handler not available')
+      }
+    }
+  }
+
+  const sendVideoSync = (action, data) => {
+    console.log('📤 ATTEMPTING TO SEND VIDEO SYNC')
+    console.log('📤 DataChannel exists:', !!dataChannel)
+    console.log('📤 DataChannel state:', dataChannel?.readyState)
+    if (dataChannel && dataChannel.readyState === 'open') {
+      const syncData = {
+        type: 'video_sync',
+        action,
+        ...data
+      }
+      console.log('📤 Sending video sync:', syncData)
+      console.log('📤 JSON string:', JSON.stringify(syncData))
+      dataChannel.send(JSON.stringify(syncData))
+      console.log('📤 Message sent successfully')
+    } else {
+      console.log('📤 ERROR: Cannot send video sync - dataChannel not ready:', dataChannel?.readyState)
+    }
+  }
+
+  // Test function to verify data channel communication
+  const testDataChannel = () => {
+    if (dataChannel && dataChannel.readyState === 'open') {
+      const testMessage = {
+        type: 'message',
+        message: 'TEST MESSAGE FROM DATA CHANNEL'
+      }
+      console.log('🧪 SENDING TEST MESSAGE:', testMessage)
+      dataChannel.send(JSON.stringify(testMessage))
+    } else {
+      console.log('🧪 CANNOT SEND TEST - DataChannel state:', dataChannel?.readyState)
+    }
+  }
+
+  // Test function specifically for video sync
+  const testVideoSync = () => {
+    if (dataChannel && dataChannel.readyState === 'open') {
+      const testSyncMessage = {
+        type: 'video_sync',
+        action: 'play_pause',
+        isPlaying: true
+      }
+      console.log('🧪 SENDING TEST VIDEO SYNC:', testSyncMessage)
+      dataChannel.send(JSON.stringify(testSyncMessage))
+    } else {
+      console.log('🧪 CANNOT SEND VIDEO SYNC TEST - DataChannel state:', dataChannel?.readyState)
+    }
   }
 
   // Helper function to wait for ICE gathering to complete
@@ -275,6 +368,7 @@ function App() {
       const dataChannel = pc.createDataChannel('chat', {
         ordered: true // reliable by default; removes random stalls from dropped chunks
       })
+      console.log('📡 CREATING DATA CHANNEL')
       setDataChannel(dataChannel)
       setupDataChannel(dataChannel)
 
@@ -418,9 +512,12 @@ function App() {
         type: 'message',
         message: newMessage.trim()
       }
+      console.log('📤 SENDING CHAT MESSAGE:', messageData)
       dataChannel.send(JSON.stringify(messageData))
       addMessage('local', newMessage.trim())
       setNewMessage('')
+    } else {
+      console.log('📤 CANNOT SEND CHAT MESSAGE - DataChannel state:', dataChannel?.readyState)
     }
   }
 
@@ -783,7 +880,6 @@ function App() {
     setLocalOffer('')
     setRemoteOffer('')
     setConnectionMode('create')
-    setQrCode('')
     setIceCandidates([])
     setRemoteIceCandidates([])
     setSignalingState('stable')
@@ -795,6 +891,31 @@ function App() {
   const resetConnection = () => {
     disconnect()
     setMessages([])
+  }
+
+  // Show ConnectedPage when connection is established
+  if (connectionStatus === 'connected') {
+    return (
+      <ConnectedPage
+        messages={messages}
+        setMessages={setMessages}
+        newMessage={newMessage}
+        setNewMessage={setNewMessage}
+        sendMessage={sendMessage}
+        handleKeyPress={handleKeyPress}
+        dataChannel={dataChannel}
+        fileTransfers={fileTransfers}
+        sendFile={sendFile}
+        cancelTransfer={cancelTransfer}
+        formatBytes={formatBytes}
+        formatSpeed={formatSpeed}
+        disconnect={disconnect}
+        sendVideoSync={sendVideoSync}
+        setVideoSyncHandlers={setVideoSyncHandlers}
+        testDataChannel={testDataChannel}
+        testVideoSync={testVideoSync}
+      />
+    )
   }
 
   return (
