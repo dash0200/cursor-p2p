@@ -153,6 +153,12 @@ function App() {
         handleIncomingBinaryChunk(event.data)
         return
       }
+      // Some browsers deliver as Blob
+      if (event.data instanceof Blob) {
+        const buf = await event.data.arrayBuffer()
+        handleIncomingBinaryChunk(buf)
+        return
+      }
       // Handle string-based protocol messages (JSON)
       if (typeof event.data === 'string') {
         try {
@@ -267,8 +273,7 @@ function App() {
     try {
       const pc = createPeerConnection()
       const dataChannel = pc.createDataChannel('chat', {
-        ordered: true,
-        maxRetransmits: 3
+        ordered: true // reliable by default; removes random stalls from dropped chunks
       })
       setDataChannel(dataChannel)
       setupDataChannel(dataChannel)
@@ -643,7 +648,10 @@ function App() {
     // Enforce order by seq
     const expectedSeq = entry.expectedSeq || 0
     if (seq !== expectedSeq) {
-      // Ignore out-of-order (ordered channel should prevent this) or could buffer
+      // With reliable ordered channel, out-of-order shouldn't happen; request retransmit if gap
+      if (seq > expectedSeq) {
+        dataChannel?.send(JSON.stringify({ type: 'chunk-nack', id, seq: expectedSeq }))
+      }
       return
     }
     // Write to file stream, or accumulate in-memory fallback
@@ -1036,7 +1044,7 @@ function App() {
                             <div style={{ fontSize: '0.8rem', color: '#a0a0a0' }}>
                               {formatBytes(t.transferred || 0)} / {formatBytes(t.size)}
                               {typeof t.speedBps === 'number' && t.status === 'in_progress' ? ` • ${formatSpeed(t.speedBps)}` : ''}
-                            </div>
+                          </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
                             <span>{Math.round((t.progress || 0) * 100)}% {t.status}</span>
