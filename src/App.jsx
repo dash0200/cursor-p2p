@@ -19,9 +19,13 @@ function App() {
   const [remoteIceCandidates, setRemoteIceCandidates] = useState([])
   const [signalingState, setSignalingState] = useState('stable')
   const [fileTransfers, setFileTransfers] = useState([]) // history entries
-  const videoSyncHandlersRef = useRef({}) // { onPlayPause, onSeek }
-  const pendingSyncEventsRef = useRef([]) // Array of queued sync events
   const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window
+  
+  // Audio channel state
+  const [isInAudioChannel, setIsInAudioChannel] = useState(false)
+  const [localAudioStream, setLocalAudioStream] = useState(null)
+  const [remoteAudioStream, setRemoteAudioStream] = useState(null)
+  const [micActivity, setMicActivity] = useState(false)
   
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -30,6 +34,9 @@ function App() {
   const messageIdCounter = useRef(0)
   const incomingFilesRef = useRef(new Map()) // id -> { name, size, chunkSize, receivedBytes, expectedSeq, handle, writable, writer, runningCrc32, lastMeasureTime, lastMeasuredBytes }
   const sendingFilesRef = useRef(new Map()) // id -> { file, chunkSize, reader, offset, seq, runningCrc32, abortController, lastMeasureTime, lastMeasuredBytes, canceled }
+  const audioContextRef = useRef(null)
+  const analyserRef = useRef(null)
+  const micActivityIntervalRef = useRef(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -138,6 +145,14 @@ function App() {
       setupDataChannel(channel)
     }
 
+    pc.ontrack = (event) => {
+      console.log('🎵 RECEIVING AUDIO TRACK')
+      if (event.track.kind === 'audio') {
+        setRemoteAudioStream(event.streams[0])
+        addMessage('system', 'Remote audio stream received')
+      }
+    }
+
     setPeerConnection(pc)
     return pc
   }
@@ -182,22 +197,6 @@ function App() {
             console.log('📨 Processing chat message')
             console.log('📨 MSG RECEIVED:', data.message)
             addMessage('remote', data.message)
-          } else if (data.type === 'video_sync') {
-            console.log('📨 Processing video sync message')
-            console.log('📨 VIDEO SYNC MSG RECEIVED:', data)
-            handleVideoSync(data)
-          } else if (data.type === 'video_call_offer') {
-            console.log('📨 Processing video call offer')
-            handleVideoCallOffer(data.offer)
-          } else if (data.type === 'video_call_answer') {
-            console.log('📨 Processing video call answer')
-            handleVideoCallAnswer(data.answer)
-          } else if (data.type === 'video_call_ice') {
-            console.log('📨 Processing video call ICE candidate')
-            handleVideoCallICE(data.candidate)
-          } else if (data.type === 'video_call_end') {
-            console.log('📨 Processing video call end')
-            handleVideoCallEnd()
           } else if (data.type === 'file-offer') {
             // Offer to send a file; receiver chooses save location and replies with accept and start offset
             handleIncomingFileOffer(data)
@@ -241,6 +240,11 @@ function App() {
             }
             setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, status: 'canceled' } : t))
             addMessage('system', `Transfer canceled by peer${reason ? `: ${reason}` : ''}`)
+          } else if (data.type === 'audio-join') {
+            addMessage('system', 'Remote peer joined audio channel')
+          } else if (data.type === 'audio-leave') {
+            addMessage('system', 'Remote peer left audio channel')
+            setRemoteAudioStream(null)
           }
         } catch (e) {
           console.log('📨 JSON PARSE ERROR:', e)
@@ -267,136 +271,8 @@ function App() {
     setMessages(prev => [...prev, message])
   }
 
-  // Video sync functions
-  const handleVideoSync = (data) => {
-    console.log('📡 SYNC MESSAGE RECEIVED:', data)
-    console.log('📡 Current handlers:', {
-      onPlayPause: !!videoSyncHandlersRef.current.onPlayPause,
-      onSeek: !!videoSyncHandlersRef.current.onSeek
-    })
-    
-    // Check if handlers are available
-    const handlers = videoSyncHandlersRef.current
-    const hasHandlers = handlers.onPlayPause && handlers.onSeek
-    
-    if (!hasHandlers) {
-      console.log('📡 Handlers not ready - queuing sync event')
-      pendingSyncEventsRef.current.push(data)
-      console.log('📡 Queued events count:', pendingSyncEventsRef.current.length)
-      return
-    }
-    
-    // Process the sync event immediately
-    console.log('📡 Processing sync event immediately')
-    processSyncEvent(data)
-  }
 
-  const processSyncEvent = (data) => {
-    console.log('📡 Processing sync event:', data)
-    const handlers = videoSyncHandlersRef.current
-    
-    if (data.action === 'play_pause') {
-      console.log('📡 Calling onPlayPause handler with:', data.isPlaying)
-      if (handlers.onPlayPause) {
-        handlers.onPlayPause(data.isPlaying)
-        console.log('📡 onPlayPause handler called successfully')
-      } else {
-        console.log('📡 ERROR: onPlayPause handler not available during processing')
-      }
-    } else if (data.action === 'seek') {
-      console.log('📡 Calling onSeek handler with:', data.time)
-      if (handlers.onSeek) {
-        handlers.onSeek(data.time)
-        console.log('📡 onSeek handler called successfully')
-      } else {
-        console.log('📡 ERROR: onSeek handler not available during processing')
-      }
-    } else {
-      console.log('📡 Unknown sync action:', data.action)
-    }
-  }
 
-  const flushPendingSyncEvents = () => {
-    console.log('📡 Flushing pending sync events, count:', pendingSyncEventsRef.current.length)
-    
-    if (pendingSyncEventsRef.current.length === 0) {
-      console.log('📡 No pending events to flush')
-      return
-    }
-    
-    const handlers = videoSyncHandlersRef.current
-    const hasHandlers = handlers.onPlayPause && handlers.onSeek
-    
-    if (!hasHandlers) {
-      console.log('📡 Handlers still not ready, keeping events queued')
-      return
-    }
-    
-    console.log('📡 Processing all queued events')
-    const eventsToProcess = [...pendingSyncEventsRef.current]
-    pendingSyncEventsRef.current = []
-    
-    eventsToProcess.forEach((event, index) => {
-      console.log(`📡 Processing queued event ${index + 1}/${eventsToProcess.length}:`, event)
-      processSyncEvent(event)
-    })
-    
-    console.log('📡 All queued events processed')
-  }
-
-  // Video call handlers
-  const handleVideoCallOffer = async (offer) => {
-    try {
-      console.log('📞 Handling video call offer')
-      // This would be implemented in ConnectedPage
-      addMessage('system', '📞 Incoming video call...')
-    } catch (error) {
-      console.error('Error handling video call offer:', error)
-    }
-  }
-
-  const handleVideoCallAnswer = async (answer) => {
-    try {
-      console.log('📞 Handling video call answer')
-      // This would be implemented in ConnectedPage
-    } catch (error) {
-      console.error('Error handling video call answer:', error)
-    }
-  }
-
-  const handleVideoCallICE = async (candidate) => {
-    try {
-      console.log('📞 Handling video call ICE candidate')
-      // This would be implemented in ConnectedPage
-    } catch (error) {
-      console.error('Error handling video call ICE:', error)
-    }
-  }
-
-  const handleVideoCallEnd = () => {
-    console.log('📞 Handling video call end')
-    addMessage('system', '📞 Video call ended by remote peer')
-    // This would be implemented in ConnectedPage
-  }
-
-  const sendVideoSync = (action, data) => {
-    console.log('📤 ATTEMPTING TO SEND VIDEO SYNC')
-    console.log('📤 DataChannel exists:', !!dataChannel)
-    console.log('📤 DataChannel state:', dataChannel?.readyState)
-    if (dataChannel && dataChannel.readyState === 'open') {
-      const syncData = {
-        type: 'video_sync',
-        action,
-        ...data
-      }
-      console.log('📤 Sending video sync:', syncData)
-      console.log('📤 JSON string:', JSON.stringify(syncData))
-      dataChannel.send(JSON.stringify(syncData))
-      console.log('📤 Message sent successfully')
-    } else {
-      console.log('📤 ERROR: Cannot send video sync - dataChannel not ready:', dataChannel?.readyState)
-    }
-  }
 
   // Test function to verify data channel communication
   const testDataChannel = () => {
@@ -412,20 +288,6 @@ function App() {
     }
   }
 
-  // Test function specifically for video sync
-  const testVideoSync = () => {
-    if (dataChannel && dataChannel.readyState === 'open') {
-      const testSyncMessage = {
-        type: 'video_sync',
-        action: 'play_pause',
-        isPlaying: true
-      }
-      console.log('🧪 SENDING TEST VIDEO SYNC:', testSyncMessage)
-      dataChannel.send(JSON.stringify(testSyncMessage))
-    } else {
-      console.log('🧪 CANNOT SEND VIDEO SYNC TEST - DataChannel state:', dataChannel?.readyState)
-    }
-  }
 
   // Helper function to wait for ICE gathering to complete
   const waitForIceGathering = (pc, timeout = 10000) => {
@@ -970,6 +832,11 @@ function App() {
   const formatSpeed = (bps = 0) => `${formatBytes(bps)}/s`
 
   const disconnect = () => {
+    // Clean up audio resources
+    if (isInAudioChannel) {
+      leaveAudioChannel()
+    }
+    
     if (peerConnection) {
       peerConnection.close()
       setPeerConnection(null)
@@ -995,6 +862,121 @@ function App() {
     setMessages([])
   }
 
+  // Audio channel functions
+  const joinAudioChannel = async () => {
+    try {
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      })
+      
+      setLocalAudioStream(stream)
+      setIsInAudioChannel(true)
+      
+      // Add audio track to peer connection
+      if (peerConnection) {
+        const audioTrack = stream.getAudioTracks()[0]
+        peerConnection.addTrack(audioTrack, stream)
+        
+        // Create new offer to include audio track
+        const offer = await peerConnection.createOffer()
+        await peerConnection.setLocalDescription(offer)
+        
+        addMessage('system', 'Joined audio channel - microphone active')
+      }
+      
+      // Set up microphone activity monitoring
+      setupMicActivityMonitoring(stream)
+      
+      // Notify remote peer
+      if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(JSON.stringify({ type: 'audio-join' }))
+      }
+      
+    } catch (error) {
+      console.error('Error joining audio channel:', error)
+      addMessage('system', 'Failed to join audio channel: ' + error.message)
+    }
+  }
+
+  const leaveAudioChannel = () => {
+    // Stop local audio stream
+    if (localAudioStream) {
+      localAudioStream.getTracks().forEach(track => track.stop())
+      setLocalAudioStream(null)
+    }
+    
+    // Remove audio track from peer connection
+    if (peerConnection) {
+      const senders = peerConnection.getSenders()
+      senders.forEach(sender => {
+        if (sender.track && sender.track.kind === 'audio') {
+          peerConnection.removeTrack(sender)
+        }
+      })
+    }
+    
+    // Stop mic activity monitoring
+    if (micActivityIntervalRef.current) {
+      clearInterval(micActivityIntervalRef.current)
+      micActivityIntervalRef.current = null
+    }
+    
+    // Clean up audio context
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    
+    setIsInAudioChannel(false)
+    setMicActivity(false)
+    
+    // Notify remote peer
+    if (dataChannel && dataChannel.readyState === 'open') {
+      dataChannel.send(JSON.stringify({ type: 'audio-leave' }))
+    }
+    
+    addMessage('system', 'Left audio channel')
+  }
+
+  const setupMicActivityMonitoring = (stream) => {
+    try {
+      // Create audio context for analyzing microphone input
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+      analyserRef.current = audioContextRef.current.createAnalyser()
+      
+      const source = audioContextRef.current.createMediaStreamSource(stream)
+      source.connect(analyserRef.current)
+      
+      analyserRef.current.fftSize = 256
+      const bufferLength = analyserRef.current.frequencyBinCount
+      const dataArray = new Uint8Array(bufferLength)
+      
+      // Monitor microphone activity
+      micActivityIntervalRef.current = setInterval(() => {
+        analyserRef.current.getByteFrequencyData(dataArray)
+        
+        // Calculate average volume
+        let sum = 0
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i]
+        }
+        const average = sum / bufferLength
+        
+        // Consider activity if average volume is above threshold
+        const isActive = average > 10
+        setMicActivity(isActive)
+      }, 100)
+      
+    } catch (error) {
+      console.error('Error setting up mic activity monitoring:', error)
+    }
+  }
+
   // Show ConnectedPage when connection is established
   if (connectionStatus === 'connected') {
     return (
@@ -1012,10 +994,14 @@ function App() {
         formatBytes={formatBytes}
         formatSpeed={formatSpeed}
         disconnect={disconnect}
-        sendVideoSync={sendVideoSync}
-        videoSyncHandlersRef={videoSyncHandlersRef}
-        flushPendingSyncEvents={flushPendingSyncEvents}
         addMessage={addMessage}
+        // Audio props
+        isInAudioChannel={isInAudioChannel}
+        joinAudioChannel={joinAudioChannel}
+        leaveAudioChannel={leaveAudioChannel}
+        localAudioStream={localAudioStream}
+        remoteAudioStream={remoteAudioStream}
+        micActivity={micActivity}
       />
     )
   }

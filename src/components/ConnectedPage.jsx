@@ -17,22 +17,21 @@ function ConnectedPage({
   formatBytes,
   formatSpeed,
   disconnect,
-  sendVideoSync,
-  videoSyncHandlersRef,
-  flushPendingSyncEvents,
-  addMessage
+  addMessage,
+  // Audio props
+  isInAudioChannel,
+  joinAudioChannel,
+  leaveAudioChannel,
+  localAudioStream,
+  remoteAudioStream,
+  micActivity,
 }) {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [sidebarVisible, setSidebarVisible] = useState(true)
-  const [videoCallActive, setVideoCallActive] = useState(false)
-  const [videoCallStatus, setVideoCallStatus] = useState('Ready to call')
   const videoRef = useRef(null)
-  const localVideoRef = useRef(null)
-  const remoteVideoRef = useRef(null)
-  const peerConnectionRef = useRef(null)
 
   const handleVideoLoad = () => {
     if (videoRef.current) {
@@ -72,97 +71,7 @@ function ConnectedPage({
     setSidebarVisible(!sidebarVisible)
   }
 
-  const startVideoCall = async () => {
-    try {
-      setVideoCallStatus('Starting call...')
-      
-      // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
-      })
-      
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream
-      }
-      
-      // Create peer connection
-      const peerConnection = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      })
-      
-      peerConnectionRef.current = peerConnection
-      
-      // Add local stream to peer connection
-      stream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, stream)
-      })
-      
-      // Handle remote stream
-      peerConnection.ontrack = (event) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0]
-        }
-      }
-      
-      // Handle ICE candidates
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate && dataChannel) {
-          dataChannel.send(JSON.stringify({
-            type: 'video_call_ice',
-            candidate: event.candidate
-          }))
-        }
-      }
-      
-      // Create offer
-      const offer = await peerConnection.createOffer()
-      await peerConnection.setLocalDescription(offer)
-      
-      // Send offer through data channel
-      if (dataChannel) {
-        dataChannel.send(JSON.stringify({
-          type: 'video_call_offer',
-          offer: offer
-        }))
-      }
-      
-      setVideoCallActive(true)
-      setVideoCallStatus('Call in progress')
-      addMessage('system', '🎥 Video call started')
-      
-    } catch (error) {
-      console.error('Error starting video call:', error)
-      setVideoCallStatus('Failed to start call')
-      addMessage('system', '❌ Failed to start video call')
-    }
-  }
 
-  const endVideoCall = () => {
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close()
-      peerConnectionRef.current = null
-    }
-    
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null
-    }
-    
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null
-    }
-    
-    setVideoCallActive(false)
-    setVideoCallStatus('Call ended')
-    addMessage('system', '🎥 Video call ended')
-    
-    // Notify remote peer
-    if (dataChannel) {
-      dataChannel.send(JSON.stringify({
-        type: 'video_call_end'
-      }))
-    }
-  }
 
   const formatTime = (time) => {
     const minutes = Math.floor(time / 60)
@@ -201,9 +110,6 @@ function ConnectedPage({
             togglePlayPause={togglePlayPause}
             handleSeek={handleSeek}
             formatTime={formatTime}
-            sendVideoSync={sendVideoSync}
-            videoSyncHandlersRef={videoSyncHandlersRef}
-            flushPendingSyncEvents={flushPendingSyncEvents}
             addMessage={addMessage}
           />
         </div>
@@ -241,12 +147,13 @@ function ConnectedPage({
             formatBytes={formatBytes}
             formatSpeed={formatSpeed}
             disconnect={disconnect}
-            videoCallActive={videoCallActive}
-            videoCallStatus={videoCallStatus}
-            startVideoCall={startVideoCall}
-            endVideoCall={endVideoCall}
-            localVideoRef={localVideoRef}
-            remoteVideoRef={remoteVideoRef}
+            // Audio props
+            isInAudioChannel={isInAudioChannel}
+            joinAudioChannel={joinAudioChannel}
+            leaveAudioChannel={leaveAudioChannel}
+            localAudioStream={localAudioStream}
+            remoteAudioStream={remoteAudioStream}
+            micActivity={micActivity}
           />
         )}
       </div>

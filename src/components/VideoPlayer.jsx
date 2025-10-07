@@ -13,17 +13,12 @@ function VideoPlayer({
   togglePlayPause,
   handleSeek,
   formatTime,
-  sendVideoSync,
-  videoSyncHandlersRef,
-  flushPendingSyncEvents,
-  addMessage
 }) {
   const [volume, setVolume] = useState(1)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showControls, setShowControls] = useState(false)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
   const videoContainerRef = useRef(null)
-  const isSyncingRef = useRef(false)
 
   // Helper function to format time in readable format
   const formatTimeReadable = (timeInSeconds) => {
@@ -40,27 +35,6 @@ function VideoPlayer({
     }
   }
 
-  // Helper function to log video actions to chat
-  const logVideoAction = (who, action, source, currentTime, duration, targetTime = null) => {
-    if (!addMessage) return
-    
-    const timestamp = new Date().toLocaleTimeString()
-    const progress = duration ? `${((currentTime / duration) * 100).toFixed(1)}%` : '0%'
-    
-    let message = `🎬 ${who} ${action} at ${formatTimeReadable(currentTime)} (${progress})`
-    
-    if (targetTime !== null) {
-      const timeDiff = targetTime - currentTime
-      const timeDiffFormatted = timeDiff > 0 ? `+${formatTimeReadable(timeDiff)}` : `-${formatTimeReadable(Math.abs(timeDiff))}`
-      message += ` → ${formatTimeReadable(targetTime)} (${timeDiffFormatted})`
-    }
-    
-    if (source) {
-      message += ` [${source}]`
-    }
-    
-    addMessage('system', message)
-  }
 
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value)
@@ -131,8 +105,6 @@ function VideoPlayer({
 
     switch (e.code) {
       case 'Space':
-        const currentTime = videoRef.current?.currentTime || 0
-        logVideoAction('You', isPlaying ? 'paused' : 'played', 'Space Bar', currentTime, duration)
         handleTogglePlayPause()
         break
       case 'ArrowUp':
@@ -147,13 +119,11 @@ function VideoPlayer({
         break
       case 'ArrowLeft':
         const seekLeft = Math.max(0, currentTime - 10)
-        logVideoAction('You', 'seeked', 'Arrow Left', currentTime, duration, seekLeft)
-        handleSeekWithSync(seekLeft, 'Arrow Left Key')
+        handleSeek(seekLeft)
         break
       case 'ArrowRight':
         const seekRight = Math.min(duration, currentTime + 10)
-        logVideoAction('You', 'seeked', 'Arrow Right', currentTime, duration, seekRight)
-        handleSeekWithSync(seekRight, 'Arrow Right Key')
+        handleSeek(seekRight)
         break
       default:
         break
@@ -170,95 +140,12 @@ function VideoPlayer({
     }
   }, [currentVideo, volume, currentTime, duration, togglePlayPause])
 
-  // Set up video sync handlers - React-safe approach
-  useEffect(() => {
-    console.log('🎬 VideoPlayer mounted - setting up sync handlers')
-    
-    // Register the sync handlers
-    const onPlayPause = (isPlaying) => {
-      const currentTime = videoRef.current?.currentTime || 0
-      logVideoAction('Remote', isPlaying ? 'played' : 'paused', 'Sync', currentTime, duration)
-      
-      if (videoRef.current && !isSyncingRef.current) {
-        isSyncingRef.current = true
-        
-        // Update React state first
-        setIsPlaying(isPlaying)
-        
-        // Then update video element
-        if (isPlaying) {
-          videoRef.current.play()
-        } else {
-          videoRef.current.pause()
-        }
-        
-        setTimeout(() => {
-          isSyncingRef.current = false
-        }, 100)
-      }
-    }
 
-    const onSeek = (time) => {
-      const currentTime = videoRef.current?.currentTime || 0
-      logVideoAction('Remote', 'seeked', 'Sync', currentTime, duration, time)
-      
-      if (videoRef.current && !isSyncingRef.current) {
-        isSyncingRef.current = true
-        
-        videoRef.current.currentTime = time
-        
-        setTimeout(() => {
-          isSyncingRef.current = false
-        }, 100)
-      }
-    }
-
-    // Store handlers in ref
-    videoSyncHandlersRef.current = {
-      onPlayPause,
-      onSeek
-    }
-    
-    console.log('🎬 Sync handlers registered')
-    console.log('🎬 Flushing any pending sync events')
-    
-    // Flush any pending sync events
-    flushPendingSyncEvents()
-    
-    // Cleanup on unmount
-    return () => {
-      console.log('🎬 VideoPlayer unmounting - clearing sync handlers')
-      videoSyncHandlersRef.current = {}
-    }
-  }, [videoSyncHandlersRef, flushPendingSyncEvents])
-
-  // Enhanced toggle play/pause with sync
+  // Toggle play/pause
   const handleTogglePlayPause = () => {
-    const newPlayingState = !isPlaying
-    const currentTime = videoRef.current?.currentTime || 0
-    logVideoAction('You', isPlaying ? 'paused' : 'played', 'Video Click', currentTime, duration)
-    
     togglePlayPause()
-    if (sendVideoSync) {
-      sendVideoSync('play_pause', { isPlaying: newPlayingState })
-    }
   }
 
-  // Enhanced seek with sync
-  const handleSeekWithSync = (time, source = 'Unknown') => {
-    const currentTime = videoRef.current?.currentTime || 0
-    logVideoAction('You', 'seeked', source, currentTime, duration, time)
-    
-    // Apply seek locally first
-    if (handleSeek) {
-      handleSeek(time)
-    }
-    
-    // Send sync message
-    if (sendVideoSync) {
-      sendVideoSync('seek', { time })
-    }
-  }
 
   return (
     <div className="video-player">
@@ -274,22 +161,8 @@ function VideoPlayer({
             className="main-video"
             onLoadedMetadata={handleVideoLoad}
             onTimeUpdate={handleTimeUpdate}
-            onPlay={() => {
-              if (!isSyncingRef.current) {
-                console.log('🎬 Video play event - updating state to true')
-                setIsPlaying(true)
-              } else {
-                console.log('🎬 Video play event - ignoring (syncing)')
-              }
-            }}
-            onPause={() => {
-              if (!isSyncingRef.current) {
-                console.log('🎬 Video pause event - updating state to false')
-                setIsPlaying(false)
-              } else {
-                console.log('🎬 Video pause event - ignoring (syncing)')
-              }
-            }}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
             onClick={handleTogglePlayPause}
           >
             <source src={currentVideo} type="video/mp4" />
@@ -341,11 +214,7 @@ function VideoPlayer({
             <div className="video-controls">
               <button 
                 className="control-btn play-pause"
-                onClick={() => {
-                  const currentTime = videoRef.current?.currentTime || 0
-                  logVideoAction('You', isPlaying ? 'paused' : 'played', 'Play/Pause Button', currentTime, duration)
-                  handleTogglePlayPause()
-                }}
+                onClick={handleTogglePlayPause}
                 title={isPlaying ? 'Pause' : 'Play'}
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -369,9 +238,7 @@ function VideoPlayer({
                 const clickX = e.clientX - rect.left
                 const percentage = clickX / rect.width
                 const newTime = percentage * duration
-                const currentTime = videoRef.current?.currentTime || 0
-                logVideoAction('You', 'seeked', 'Progress Bar', currentTime, duration, newTime)
-                handleSeekWithSync(newTime, 'Progress Bar Click')
+                handleSeek(newTime)
               }}>
                 <div className="progress-bar">
                   <div 
