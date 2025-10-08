@@ -1159,6 +1159,14 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex: 1;
+}
+
+.mic-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
 }
 
 .mic-icon {
@@ -1191,6 +1199,35 @@
   font-size: 0.875rem;
   color: #e0e0e0;
   font-weight: 500;
+}
+
+.volume-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.volume-bar {
+  flex: 1;
+  height: 4px;
+  background: #1a1a1a;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.volume-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #fbbf24 70%, #ef4444 100%);
+  transition: width 0.1s ease;
+  border-radius: 2px;
+}
+
+.volume-text {
+  font-size: 0.7rem;
+  color: #a0a0a0;
+  min-width: 30px;
+  text-align: right;
 }
 
 .leave-audio-btn {
@@ -1239,4 +1276,28 @@
 
 .remote-speaker-indicator svg {
   animation: pulse 1.5s infinite;
+}
+
+.test-audio-btn {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: #1e40af;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 
+    2px 2px 4px rgba(30, 64, 175, 0.3),
+    -2px -2px 4px rgba(30, 64, 175, 0.1);
+}
+
+.test-audio-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 
+    3px 3px 6px rgba(30, 64, 175, 0.4),
+    -3px -3px 6px rgba(30, 64, 175, 0.2);
 }

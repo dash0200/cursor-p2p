@@ -22,6 +22,9 @@ function ChatSidebar({
   localAudioStream,
   remoteAudioStream,
   micActivity,
+  micVolume,
+  isPeerConnectionReady,
+  audioElementRef,
 }) {
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -216,7 +219,8 @@ function ChatSidebar({
                 <button 
                   className="join-audio-btn"
                   onClick={joinAudioChannel}
-                  disabled={!dataChannel || dataChannel.readyState !== 'open'}
+                  disabled={!isPeerConnectionReady()}
+                  title={!isPeerConnectionReady() ? 'Connect to a peer first' : 'Join audio channel'}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -238,9 +242,20 @@ function ChatSidebar({
                           <line x1="8" y1="23" x2="16" y2="23"></line>
                         </svg>
                       </div>
-                      <span className="mic-status">
-                        {micActivity ? 'Speaking...' : 'Connected'}
-                      </span>
+                      <div className="mic-info">
+                        <span className="mic-status">
+                          {micActivity ? 'Speaking...' : 'Connected'}
+                        </span>
+                        <div className="volume-meter">
+                          <div className="volume-bar">
+                            <div 
+                              className="volume-fill" 
+                              style={{ width: `${micVolume}%` }}
+                            ></div>
+                          </div>
+                          <span className="volume-text">{Math.round(micVolume)}%</span>
+                        </div>
+                      </div>
                     </div>
                     <button 
                       className="leave-audio-btn"
@@ -266,6 +281,26 @@ function ChatSidebar({
                         </svg>
                         <span>Remote peer is speaking</span>
                       </div>
+                      <button 
+                        className="test-audio-btn"
+                        onClick={() => {
+                          const audio = document.querySelector('audio[style*="display: none"]')
+                          if (audio) {
+                            console.log('🎵 Testing audio element:', audio)
+                            console.log('🎵 Audio srcObject:', audio.srcObject)
+                            console.log('🎵 Audio muted:', audio.muted)
+                            console.log('🎵 Audio volume:', audio.volume)
+                            console.log('🎵 Audio paused:', audio.paused)
+                            audio.play().then(() => {
+                              console.log('🎵 Audio test play successful')
+                            }).catch(e => {
+                              console.log('🎵 Audio test play failed:', e)
+                            })
+                          }
+                        }}
+                      >
+                        Test Audio
+                      </button>
                     </div>
                   )}
                 </div>
@@ -273,17 +308,28 @@ function ChatSidebar({
             </div>
 
             {/* Hidden audio element for remote audio playback */}
-            {remoteAudioStream && (
-              <audio 
-                ref={(audio) => {
-                  if (audio && remoteAudioStream) {
-                    audio.srcObject = remoteAudioStream
-                    audio.autoplay = true
-                  }
-                }}
-                style={{ display: 'none' }}
-              />
-            )}
+            <audio 
+              ref={audioElementRef}
+              style={{ display: 'none' }}
+              controls={false}
+              muted={false}
+              autoPlay
+              onLoadedMetadata={() => {
+                console.log('🎵 Audio metadata loaded')
+                console.log('🎵 Audio duration:', audioElementRef.current?.duration)
+              }}
+              onCanPlay={() => {
+                console.log('🎵 Audio can play')
+                audioElementRef.current?.play().catch(e => console.log('🎵 Auto-play failed:', e))
+              }}
+              onPlay={() => console.log('🎵 Audio started playing')}
+              onPause={() => console.log('🎵 Audio paused')}
+              onError={(e) => {
+                console.log('🎵 Audio error:', e)
+                console.log('🎵 Audio error details:', e.target.error)
+              }}
+              onVolumeChange={() => console.log('🎵 Audio volume changed:', audioElementRef.current?.volume)}
+            />
           </div>
         )}
 

@@ -25,6 +25,9 @@ function ConnectedPage({
   localAudioStream,
   remoteAudioStream,
   micActivity,
+  micVolume,
+  isPeerConnectionReady,
+  audioElementRef,
 }) {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -154,6 +157,9 @@ function ConnectedPage({
             localAudioStream={localAudioStream}
             remoteAudioStream={remoteAudioStream}
             micActivity={micActivity}
+            micVolume={micVolume}
+            isPeerConnectionReady={isPeerConnectionReady}
+            audioElementRef={audioElementRef}
           />
         )}
       </div>
