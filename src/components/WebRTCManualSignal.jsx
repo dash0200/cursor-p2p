@@ -56,13 +56,25 @@ export default function WebRTCManualSignal() {
 
   const sendMessage = (message) => {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
+      // Console log pause/play messages being sent
+      if (message.type === 'video-pause' || message.type === 'video-play') {
+        console.log('SENDING:', message.type, 'with data:', JSON.stringify(message));
+      }
       dataChannelRef.current.send(JSON.stringify(message));
     }
   };
 
   const handleDataChannelMessage = async (data) => {
+    console.log('handleDataChannelMessage called with:', data);
     try {
+      console.log('Raw data received:', data);
       const message = JSON.parse(data);
+      console.log('Parsed message:', message);
+      
+      // Console log pause/play messages being received
+      if (message.type === 'video-pause' || message.type === 'video-play') {
+        console.log('RECEIVED:', message.type, 'with data:', JSON.stringify(message));
+      }
 
       if (message.type === 'offer') {
         if (isNegotiatingRef.current) {
@@ -119,7 +131,8 @@ export default function WebRTCManualSignal() {
         if (videoRef.current) {
           videoRef.current.play().then(() => {
             setIsPlaying(true);
-            addLog('Remote peer started video playback');
+            const time = message.time !== undefined ? message.time : videoRef.current.currentTime;
+            addLog(`Remote peer started video playback at ${formatTime(time)} (received time: ${message.time})`);
           }).catch((error) => {
             console.log('Remote play failed:', error);
             addLog('Remote play failed - may need user interaction');
@@ -129,7 +142,8 @@ export default function WebRTCManualSignal() {
         if (videoRef.current) {
           videoRef.current.pause();
           setIsPlaying(false);
-          addLog('Remote peer paused video');
+          const time = message.time !== undefined ? message.time : videoRef.current.currentTime;
+          addLog(`Remote peer paused video at ${formatTime(time)} (received time: ${message.time})`);
         }
       } else if (message.type === 'video-seek') {
         if (videoRef.current && message.time !== undefined) {
@@ -168,6 +182,7 @@ export default function WebRTCManualSignal() {
     };
     
     channel.onmessage = (e) => {
+      console.log('Data channel onmessage triggered with:', e.data);
       handleDataChannelMessage(e.data);
     };
   };
@@ -401,8 +416,8 @@ export default function WebRTCManualSignal() {
           videoRef.current.play().then(() => {
             setIsPlaying(true);
             // Send play message to peer when auto-playing
-            sendMessage({ type: 'video-play' });
-            addLog('Auto-started video playback and notified peer');
+            sendMessage({ type: 'video-play', time: 0 });
+            addLog(`You auto-started video playback at ${formatTime(0)} and notified peer`);
           }).catch((error) => {
             console.log('Autoplay prevented:', error);
             addLog('Autoplay prevented - user interaction may be required');
@@ -426,14 +441,16 @@ export default function WebRTCManualSignal() {
         videoRef.current.pause();
         setIsPlaying(false);
         // Send pause message to peer
-        sendMessage({ type: 'video-pause' });
-        addLog('Paused video and notified peer');
+        const pauseMessage = { type: 'video-pause', time: currentTime };
+        sendMessage(pauseMessage);
+        addLog(`You paused video at ${formatTime(currentTime)} and notified peer (sent time: ${currentTime})`);
       } else {
         videoRef.current.play().then(() => {
           setIsPlaying(true);
           // Send play message to peer
-          sendMessage({ type: 'video-play' });
-          addLog('Started video playback and notified peer');
+          const playMessage = { type: 'video-play', time: currentTime };
+          sendMessage(playMessage);
+          addLog(`You started video playback at ${formatTime(currentTime)} and notified peer (sent time: ${currentTime})`);
         }).catch((error) => {
           console.log('Play failed:', error);
           addLog('Play failed - may need user interaction');
@@ -445,14 +462,16 @@ export default function WebRTCManualSignal() {
   const handleSeek = (e) => {
     if (videoRef.current) {
       const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
+      // Handle both mouse and touch events
+      const clientX = e.clientX || (e.touches && e.touches[0]?.clientX);
+      const clickX = clientX - rect.left;
       const width = rect.width;
       const newTime = (clickX / width) * duration;
       videoRef.current.currentTime = newTime;
       setCurrentTime(newTime);
       // Send seek message to peer
       sendMessage({ type: 'video-seek', time: newTime });
-      addLog(`Seeked to ${formatTime(newTime)} and notified peer`);
+      addLog(`You seeked to ${formatTime(newTime)} and notified peer`);
     }
   };
 
@@ -487,9 +506,15 @@ export default function WebRTCManualSignal() {
   };
 
   const formatTime = (time) => {
-    const minutes = Math.floor(time / 60);
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
   };
 
   const forceStartRemoteAudio = () => {
@@ -588,7 +613,7 @@ export default function WebRTCManualSignal() {
         video.currentTime = seekLeftTime;
         setCurrentTime(seekLeftTime);
         sendMessage({ type: 'video-seek', time: seekLeftTime });
-        addLog(`Seeked left to ${formatTime(seekLeftTime)} and notified peer`);
+        addLog(`You seeked left to ${formatTime(seekLeftTime)} and notified peer`);
         break;
       case 'ArrowRight':
         e.preventDefault();
@@ -596,7 +621,7 @@ export default function WebRTCManualSignal() {
         video.currentTime = seekRightTime;
         setCurrentTime(seekRightTime);
         sendMessage({ type: 'video-seek', time: seekRightTime });
-        addLog(`Seeked right to ${formatTime(seekRightTime)} and notified peer`);
+        addLog(`You seeked right to ${formatTime(seekRightTime)} and notified peer`);
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -935,6 +960,7 @@ export default function WebRTCManualSignal() {
                     <div 
                       className="progress-bar"
                       onClick={handleSeek}
+                      onTouchStart={handleSeek}
                     >
                       <div 
                         className="progress-fill"
@@ -1115,8 +1141,8 @@ export default function WebRTCManualSignal() {
                     ))
                   )}
                 </div>
-                <div className="chat-input-container">
-                  <input
+               <div className='input-container'>
+                <input
                     type="text"
                     value={chatMessage}
                     onChange={(e) => setChatMessage(e.target.value)}
@@ -1131,7 +1157,7 @@ export default function WebRTCManualSignal() {
                   >
                     Send
                   </button>
-                </div>
+               </div>
               </div>
             </div>
 
