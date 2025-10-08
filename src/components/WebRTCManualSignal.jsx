@@ -70,7 +70,7 @@ export default function WebRTCManualSignal() {
       console.log('Raw data received:', data);
       const message = JSON.parse(data);
       console.log('Parsed message:', message);
-      
+
       // Console log pause/play messages being received
       if (message.type === 'video-pause' || message.type === 'video-play') {
         console.log('RECEIVED:', message.type, 'with data:', JSON.stringify(message));
@@ -82,17 +82,17 @@ export default function WebRTCManualSignal() {
           return;
         }
         isNegotiatingRef.current = true;
-        
+
         await pcRef.current.setRemoteDescription(message.sdp);
         const answer = await pcRef.current.createAnswer();
         await pcRef.current.setLocalDescription(answer);
-        
+
         // Add any pending candidates
         for (const candidate of pendingCandidatesRef.current) {
           await pcRef.current.addIceCandidate(candidate);
         }
         pendingCandidatesRef.current = [];
-        
+
         sendMessage({ type: 'answer', sdp: pcRef.current.localDescription });
         isNegotiatingRef.current = false;
         addLog('Auto-answered renegotiation offer');
@@ -132,7 +132,7 @@ export default function WebRTCManualSignal() {
           videoRef.current.play().then(() => {
             setIsPlaying(true);
             const time = message.time !== undefined ? message.time : videoRef.current.currentTime;
-            addLog(`Remote peer started video playback at ${formatTime(time)} (received time: ${message.time})`);
+            addLog(`Played by peer at ${formatTime(time)}`);
           }).catch((error) => {
             console.log('Remote play failed:', error);
             addLog('Remote play failed - may need user interaction');
@@ -143,20 +143,13 @@ export default function WebRTCManualSignal() {
           videoRef.current.pause();
           setIsPlaying(false);
           const time = message.time !== undefined ? message.time : videoRef.current.currentTime;
-          addLog(`Remote peer paused video at ${formatTime(time)} (received time: ${message.time})`);
+          addLog(`Paused by peer at ${formatTime(time)}`);
         }
       } else if (message.type === 'video-seek') {
         if (videoRef.current && message.time !== undefined) {
           videoRef.current.currentTime = message.time;
           setCurrentTime(message.time);
-          addLog(`Remote peer seeked to ${formatTime(message.time)}`);
-        }
-      } else if (message.type === 'video-volume') {
-        if (videoRef.current && message.volume !== undefined) {
-          videoRef.current.volume = message.volume;
-          setVolume(message.volume);
-          setIsVideoMuted(message.volume === 0);
-          addLog(`Remote peer changed volume to ${Math.round(message.volume * 100)}%`);
+          addLog(`Seeked by peer to ${formatTime(message.time)}`);
         }
       } else if (message.type === 'video-file') {
         if (message.fileName && message.fileSize) {
@@ -172,15 +165,15 @@ export default function WebRTCManualSignal() {
 
   const setupDataChannel = (channel) => {
     dataChannelRef.current = channel;
-    
+
     channel.onopen = () => {
       addLog('Data channel opened - ready for voice chat');
     };
-    
+
     channel.onclose = () => {
       addLog('Data channel closed');
     };
-    
+
     channel.onmessage = (e) => {
       console.log('Data channel onmessage triggered with:', e.data);
       handleDataChannelMessage(e.data);
@@ -246,7 +239,7 @@ export default function WebRTCManualSignal() {
   const createDataChannelOffer = async () => {
     addLog('Creating data channel offer...');
     const pc = createPeerConnection();
-    
+
     const dataChannel = pc.createDataChannel('signaling');
     setupDataChannel(dataChannel);
 
@@ -284,7 +277,7 @@ export default function WebRTCManualSignal() {
         if (!pc) {
           createPeerConnection();
         }
-        
+
         await pcRef.current.setRemoteDescription(desc);
         addLog('Remote offer set');
 
@@ -347,7 +340,7 @@ export default function WebRTCManualSignal() {
       setInVoiceChannel(true);
       sendMessage({ type: 'voice-join' });
       addLog('Joined voice channel - audio streaming');
-      
+
       // Force a renegotiation to ensure audio tracks are properly transmitted
       if (pcRef.current && dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
         addLog('Triggering renegotiation for audio tracks');
@@ -373,13 +366,13 @@ export default function WebRTCManualSignal() {
       });
       localStreamRef.current = null;
     }
-    
+
     // Stop remote audio playback
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
     }
-    
+
     setInVoiceChannel(false);
     setIsMuted(false);
     setRemoteInVoiceChannel(false); // Also reset remote state
@@ -417,7 +410,7 @@ export default function WebRTCManualSignal() {
             setIsPlaying(true);
             // Send play message to peer when auto-playing
             sendMessage({ type: 'video-play', time: 0 });
-            addLog(`You auto-started video playback at ${formatTime(0)} and notified peer`);
+            addLog(`Played by you at ${formatTime(0)}`);
           }).catch((error) => {
             console.log('Autoplay prevented:', error);
             addLog('Autoplay prevented - user interaction may be required');
@@ -425,9 +418,9 @@ export default function WebRTCManualSignal() {
         };
       }
       // Notify peer about video file selection
-      sendMessage({ 
-        type: 'video-file', 
-        fileName: file.name, 
+      sendMessage({
+        type: 'video-file',
+        fileName: file.name,
         fileSize: file.size,
         fileType: file.type
       });
@@ -443,14 +436,14 @@ export default function WebRTCManualSignal() {
         // Send pause message to peer
         const pauseMessage = { type: 'video-pause', time: currentTime };
         sendMessage(pauseMessage);
-        addLog(`You paused video at ${formatTime(currentTime)} and notified peer (sent time: ${currentTime})`);
+        addLog(`Paused by you at ${formatTime(currentTime)}`);
       } else {
         videoRef.current.play().then(() => {
           setIsPlaying(true);
           // Send play message to peer
           const playMessage = { type: 'video-play', time: currentTime };
           sendMessage(playMessage);
-          addLog(`You started video playback at ${formatTime(currentTime)} and notified peer (sent time: ${currentTime})`);
+          addLog(`Played by you at ${formatTime(currentTime)}`);
         }).catch((error) => {
           console.log('Play failed:', error);
           addLog('Play failed - may need user interaction');
@@ -471,7 +464,7 @@ export default function WebRTCManualSignal() {
       setCurrentTime(newTime);
       // Send seek message to peer
       sendMessage({ type: 'video-seek', time: newTime });
-      addLog(`You seeked to ${formatTime(newTime)} and notified peer`);
+      addLog(`Seeked by you to ${formatTime(newTime)}`);
     }
   };
 
@@ -481,9 +474,6 @@ export default function WebRTCManualSignal() {
       setVolume(newVolume);
       videoRef.current.volume = newVolume;
       setIsVideoMuted(newVolume === 0);
-      // Send volume change message to peer
-      sendMessage({ type: 'video-volume', volume: newVolume });
-      addLog(`Changed volume to ${Math.round(newVolume * 100)}% and notified peer`);
     }
   };
 
@@ -492,15 +482,9 @@ export default function WebRTCManualSignal() {
       if (isVideoMuted) {
         videoRef.current.volume = volume;
         setIsVideoMuted(false);
-        // Send volume change message to peer
-        sendMessage({ type: 'video-volume', volume: volume });
-        addLog(`Unmuted video (${Math.round(volume * 100)}%) and notified peer`);
       } else {
         videoRef.current.volume = 0;
         setIsVideoMuted(true);
-        // Send volume change message to peer
-        sendMessage({ type: 'video-volume', volume: 0 });
-        addLog('Muted video and notified peer');
       }
     }
   };
@@ -509,7 +493,7 @@ export default function WebRTCManualSignal() {
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
-    
+
     if (hours > 0) {
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     } else {
@@ -551,7 +535,7 @@ export default function WebRTCManualSignal() {
         timestamp: new Date().toLocaleTimeString(),
         sender: 'You'
       };
-      
+
       setChatMessages(prev => [...prev, message]);
       sendMessage({ type: 'chat', text: chatMessage.trim(), timestamp: message.timestamp });
       setChatMessage('');
@@ -586,7 +570,7 @@ export default function WebRTCManualSignal() {
 
   const toggleFullscreen = () => {
     if (!videoRef.current) return;
-    
+
     if (!document.fullscreenElement) {
       videoRef.current.requestFullscreen().catch(err => {
         console.log('Error attempting to enable fullscreen:', err);
@@ -599,10 +583,10 @@ export default function WebRTCManualSignal() {
 
   const handleKeyPress = (e) => {
     if (!videoRef.current || !videoFile) return;
-    
+
     const video = videoRef.current;
-    
-    switch(e.key) {
+
+    switch (e.key) {
       case ' ':
         e.preventDefault();
         togglePlayPause();
@@ -613,7 +597,7 @@ export default function WebRTCManualSignal() {
         video.currentTime = seekLeftTime;
         setCurrentTime(seekLeftTime);
         sendMessage({ type: 'video-seek', time: seekLeftTime });
-        addLog(`You seeked left to ${formatTime(seekLeftTime)} and notified peer`);
+        addLog(`Seeked by you to ${formatTime(seekLeftTime)}`);
         break;
       case 'ArrowRight':
         e.preventDefault();
@@ -621,7 +605,7 @@ export default function WebRTCManualSignal() {
         video.currentTime = seekRightTime;
         setCurrentTime(seekRightTime);
         sendMessage({ type: 'video-seek', time: seekRightTime });
-        addLog(`You seeked right to ${formatTime(seekRightTime)} and notified peer`);
+        addLog(`Seeked by you to ${formatTime(seekRightTime)}`);
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -629,8 +613,6 @@ export default function WebRTCManualSignal() {
         video.volume = newVolumeUp;
         setVolume(newVolumeUp);
         setIsVideoMuted(newVolumeUp === 0);
-        sendMessage({ type: 'video-volume', volume: newVolumeUp });
-        addLog(`Increased volume to ${Math.round(newVolumeUp * 100)}% and notified peer`);
         break;
       case 'ArrowDown':
         e.preventDefault();
@@ -638,8 +620,6 @@ export default function WebRTCManualSignal() {
         video.volume = newVolumeDown;
         setVolume(newVolumeDown);
         setIsVideoMuted(newVolumeDown === 0);
-        sendMessage({ type: 'video-volume', volume: newVolumeDown });
-        addLog(`Decreased volume to ${Math.round(newVolumeDown * 100)}% and notified peer`);
         break;
       case 'm':
       case 'M':
@@ -702,7 +682,7 @@ export default function WebRTCManualSignal() {
   // Handle remote audio playback when voice channel state changes
   useEffect(() => {
     addLog(`Voice channel state changed - We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
-    
+
     if (!remoteAudioRef.current) {
       addLog('No remote audio element available');
       return;
@@ -740,7 +720,7 @@ export default function WebRTCManualSignal() {
         forceStartRemoteAudio();
       }
     };
-    
+
     const handleLoadedMetadata = () => {
       addLog('Remote audio metadata loaded - checking if both peers are in voice channel');
       if (inVoiceChannel && remoteInVoiceChannel) {
@@ -762,7 +742,7 @@ export default function WebRTCManualSignal() {
   useEffect(() => {
     if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current && remoteAudioRef.current.srcObject) {
       addLog('Setting up aggressive audio retry mechanism');
-      
+
       const retryAudio = () => {
         if (remoteAudioRef.current && inVoiceChannel && remoteInVoiceChannel) {
           addLog('Aggressive retry: attempting to start remote audio');
@@ -775,13 +755,13 @@ export default function WebRTCManualSignal() {
 
       // Try immediately
       retryAudio();
-      
+
       // Try after 1 second
       const timeout1 = setTimeout(retryAudio, 1000);
-      
+
       // Try after 2 seconds
       const timeout2 = setTimeout(retryAudio, 2000);
-      
+
       // Try after 3 seconds
       const timeout3 = setTimeout(retryAudio, 3000);
 
@@ -798,38 +778,12 @@ export default function WebRTCManualSignal() {
       {/* Left Side (75% when sidebar visible, 100% when collapsed) */}
       <div className="webrtc-left">
         {connectionState !== 'connected' && (
-          <div className="webrtc-header">
-            <h1 className="webrtc-title">
-              WebRTC Voice Channel
-            </h1>
-            <p className="webrtc-subtitle">
-              Discord-style voice channel - join and start talking automatically
-            </p>
-            
-            <div className="status-indicators">
-              <div className="status-indicator">
-                <div className={`status-dot ${connectionState}`} />
-                <span className="status-text">
-                  {connectionState}
-                </span>
-              </div>
-              {dataChannelRef.current && dataChannelRef.current.readyState === 'open' && (
-                <div className="status-indicator">
-                  <div className="status-dot data-channel" />
-                  <span className="status-text data-channel">Data Channel Open</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {connectionState !== 'connected' && (
           <div className="connection-grid">
             <div className="webrtc-card">
               <h2 className="card-title">
                 Step 1: Create Connection
               </h2>
-              
+
               <button
                 onClick={createDataChannelOffer}
                 className="neumorphic-btn primary"
@@ -888,7 +842,7 @@ export default function WebRTCManualSignal() {
               <h2 className="card-title">
                 Step 2: Exchange Descriptions
               </h2>
-              
+
               <label className="webrtc-label">
                 Paste Remote Description:
               </label>
@@ -898,7 +852,7 @@ export default function WebRTCManualSignal() {
                 placeholder="Paste the offer or answer from the other peer here..."
                 className="webrtc-textarea"
               />
-              
+
               <button
                 onClick={handleRemoteDescription}
                 className="neumorphic-btn success"
@@ -911,117 +865,117 @@ export default function WebRTCManualSignal() {
 
         {connectionState === 'connected' && (
           <div className="video-player-container">
-          <div className="video-player-wrapper">
-            <video
-              ref={videoRef}
-              className="video-player"
-              poster=""
-              onClick={togglePlayPause}
-              src={videoFile ? videoRef.current?.src || null : null}
-            >
-              Your browser does not support the video tag.
-            </video>
-            
-            {!videoFile && (
-              <div className="video-placeholder">
-                <div className="video-placeholder-content">
-                  <h3 className="video-placeholder-title">No Video Selected</h3>
-                  <p className="video-placeholder-subtitle">Choose a video file to start playing</p>
-                  <button
-                    className="video-select-btn"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload size={24} />
-                    Select Video File
-                  </button>
-                </div>
-                </div>
-            )}
-            
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleVideoFileSelect}
-              style={{ display: 'none' }}
-            />
-            
-            {videoFile && (
-              <div className="video-overlay">
-                <div className="video-controls">
-                  <button 
-                    className="video-control-btn"
-                    onClick={togglePlayPause}
-                    title={`${isPlaying ? 'Pause' : 'Play'} (Space)`}
-                  >
-                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                  </button>
-                  <div className="video-progress">
-                    <div 
-                      className="progress-bar"
-                      onClick={handleSeek}
-                      onTouchStart={handleSeek}
+            <div className="video-player-wrapper">
+              <video
+                ref={videoRef}
+                className="video-player"
+                poster=""
+                onClick={togglePlayPause}
+                src={videoFile ? videoRef.current?.src || null : null}
+              >
+                Your browser does not support the video tag.
+              </video>
+
+              {!videoFile && (
+                <div className="video-placeholder">
+                  <div className="video-placeholder-content">
+                    <h3 className="video-placeholder-title">No Video Selected</h3>
+                    <p className="video-placeholder-subtitle">Choose a video file to start playing</p>
+                    <button
+                      className="video-select-btn"
+                      onClick={() => fileInputRef.current?.click()}
                     >
-                      <div 
-                        className="progress-fill"
-                        style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-                      ></div>
-              </div>
+                      <Upload size={24} />
+                      Select Video File
+                    </button>
                   </div>
-                  <div className="video-time">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>/</span>
-                    <span>{formatTime(duration)}</span>
-                  </div>
-                  <div className="volume-controls">
-                  <button 
-                    className="video-control-btn"
-                    onClick={toggleVideoMute}
-                    title={`${isVideoMuted ? 'Unmute' : 'Mute'} (M)`}
-                  >
-                    {isVideoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                  </button>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={isVideoMuted ? 0 : volume}
-                      onChange={handleVolumeChange}
-                      className="volume-slider"
-                    />
-                  </div>
-                  <button 
-                    className="video-control-btn"
-                    onClick={toggleFullscreen}
-                    title="Fullscreen (F)"
-                  >
-                    <Maximize size={16} />
-                  </button>
-                  <button 
-                    className="video-control-btn"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Change Video"
-                  >
-                    <Upload size={16} />
-                  </button>
-                  {dataChannelRef.current && dataChannelRef.current.readyState === 'open' && (
-                    <div className="sync-indicator" title="Video sync active">
-                      <div className="sync-dot"></div>
-                      <span>Sync</span>
-                    </div>
-                  )}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-        )}
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                onChange={handleVideoFileSelect}
+                style={{ display: 'none' }}
+              />
+
+              {videoFile && (
+                <div className="video-overlay">
+                  <div className="video-controls">
+                    <button
+                      className="video-control-btn"
+                      onClick={togglePlayPause}
+                      title={`${isPlaying ? 'Pause' : 'Play'} (Space)`}
+                    >
+                      {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                    </button>
+                    <div className="video-progress">
+                      <div
+                        className="progress-bar"
+                        onClick={handleSeek}
+                        onTouchStart={handleSeek}
+                      >
+                        <div
+                          className="progress-fill"
+                          style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div className="video-time">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>/</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
+                    <div className="volume-controls">
+                      <button
+                        className="video-control-btn"
+                        onClick={toggleVideoMute}
+                        title={`${isVideoMuted ? 'Unmute' : 'Mute'} (M)`}
+                      >
+                        {isVideoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={isVideoMuted ? 0 : volume}
+                        onChange={handleVolumeChange}
+                        className="volume-slider"
+                      />
+                    </div>
+                    <button
+                      className="video-control-btn"
+                      onClick={toggleFullscreen}
+                      title="Fullscreen (F)"
+                    >
+                      <Maximize size={16} />
+                    </button>
+                    <button
+                      className="video-control-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Change Video"
+                    >
+                      <Upload size={16} />
+                    </button>
+                    {dataChannelRef.current && dataChannelRef.current.readyState === 'open' && (
+                      <div className="sync-indicator" title="Video sync active">
+                        <div className="sync-dot"></div>
+                        <span>Sync</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+        )}
+      </div>
 
       {/* Sidebar Toggle Button - Only show when connected */}
       {connectionState === 'connected' && (
-        <button 
+        <button
           className={`sidebar-toggle ${isSidebarCollapsed ? 'collapsed' : ''}`}
           onClick={toggleSidebar}
           title={isSidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
@@ -1036,148 +990,148 @@ export default function WebRTCManualSignal() {
       {/* Right Side (25%) - Only show when connected and not collapsed */}
       {connectionState === 'connected' && !isSidebarCollapsed && (
         <div className="webrtc-right">
-        <div className="tabs-header">
-          <button
-            className={`tab-button ${activeTab === 'voice' ? 'active' : ''}`}
-            onClick={() => setActiveTab('voice')}
-          >
-            Voice
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
-            onClick={() => setActiveTab('chat')}
-          >
-            Chat
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'log' ? 'active' : ''}`}
-            onClick={() => setActiveTab('log')}
-          >
-            Logs
-          </button>
-        </div>
-          
-            {/* Voice Channel Tab */}
-            <div className={`tab-panel ${activeTab !== 'voice' ? 'hidden' : ''}`}>
-              <div className="voice-channel-card">
+          <div className="tabs-header">
+            <button
+              className={`tab-button ${activeTab === 'voice' ? 'active' : ''}`}
+              onClick={() => setActiveTab('voice')}
+            >
+              Voice
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              Chat
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'log' ? 'active' : ''}`}
+              onClick={() => setActiveTab('log')}
+            >
+              Logs
+            </button>
+          </div>
 
-                <div className="voice-channel-visual">
-                  <div className="voice-avatar">
-                    <div className={`voice-avatar-circle ${inVoiceChannel ? 'active' : ''}`}>
-                      <Volume2 style={{ color: 'white' }} size={24} />
-                    </div>
-                    <p className="voice-avatar-name">You</p>
-                    <p className="voice-avatar-status">{inVoiceChannel ? 'Connected' : 'Not in channel'}</p>
+          {/* Voice Channel Tab */}
+          <div className={`tab-panel ${activeTab !== 'voice' ? 'hidden' : ''}`}>
+            <div className="voice-channel-card">
+
+              <div className="voice-channel-visual">
+                <div className="voice-avatar">
+                  <div className={`voice-avatar-circle ${inVoiceChannel ? 'active' : ''}`}>
+                    <Volume2 style={{ color: 'white' }} size={24} />
+                  </div>
+                  <p className="voice-avatar-name">You</p>
+                  <p className="voice-avatar-status">{inVoiceChannel ? 'Connected' : 'Not in channel'}</p>
                 </div>
 
-                  <div className="audio-visualization">
-                    <div className="audio-bars">
+                <div className="audio-visualization">
+                  <div className="audio-bars">
                     {[...Array(5)].map((_, i) => (
                       <div
                         key={i}
-                          className={`audio-bar ${inVoiceChannel && remoteInVoiceChannel ? 'active' : ''}`}
-                          style={{ animationDelay: `${i * 0.1}s` }}
+                        className={`audio-bar ${inVoiceChannel && remoteInVoiceChannel ? 'active' : ''}`}
+                        style={{ animationDelay: `${i * 0.1}s` }}
                       />
                     ))}
                   </div>
                 </div>
 
-                  <div className="voice-avatar">
-                    <div className={`voice-avatar-circle ${remoteInVoiceChannel ? 'active' : ''}`}>
-                      <Volume2 style={{ color: 'white' }} size={24} />
+                <div className="voice-avatar">
+                  <div className={`voice-avatar-circle ${remoteInVoiceChannel ? 'active' : ''}`}>
+                    <Volume2 style={{ color: 'white' }} size={24} />
                   </div>
-                    <p className="voice-avatar-name">Remote</p>
-                    <p className="voice-avatar-status">{remoteInVoiceChannel ? 'Connected' : 'Not in channel'}</p>
+                  <p className="voice-avatar-name">Remote</p>
+                  <p className="voice-avatar-status">{remoteInVoiceChannel ? 'Connected' : 'Not in channel'}</p>
+                </div>
               </div>
-            </div>
 
               {!inVoiceChannel ? (
                 <button
                   onClick={joinVoiceChannel}
-                      className="voice-control-btn join"
-                    >
-                      <Phone size={16} />
-                      Join Voice
+                  className="voice-control-btn join"
+                >
+                  <Phone size={16} />
+                  Join Voice
                 </button>
               ) : (
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                   <button
                     onClick={toggleMute}
-                        className={`voice-control-btn mute ${isMuted ? 'active' : ''}`}
-                      >
-                        {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                    className={`voice-control-btn mute ${isMuted ? 'active' : ''}`}
+                  >
+                    {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
                     {isMuted ? 'Unmute' : 'Mute'}
                   </button>
                   <button
                     onClick={leaveVoiceChannel}
-                        className="voice-control-btn leave"
-                      >
-                        <PhoneOff size={16} />
-                        Leave
+                    className="voice-control-btn leave"
+                  >
+                    <PhoneOff size={16} />
+                    Leave
                   </button>
                 </div>
               )}
 
-                <audio ref={remoteAudioRef} autoPlay className="webrtc-audio" />
+              <audio ref={remoteAudioRef} autoPlay className="webrtc-audio" />
+            </div>
           </div>
-            </div>
 
-            {/* Chat Tab */}
-            <div className={`tab-panel ${activeTab !== 'chat' ? 'hidden' : ''}`}>
-              <div className="log-card">
-                <div className="chat-container" ref={chatContainerRef}>
-                  {chatMessages.length === 0 ? (
-                    <div className="log-empty">No messages yet</div>
-                  ) : (
-                    chatMessages.map((msg, index) => (
-                      <div key={index} className={`chat-message ${msg.sender === 'You' ? 'sent' : 'received'}`}>
-                        <div className="message-content">
-                          <div className="message-bubble">
-                            <div className="message-text">{msg.text}</div>
-                          </div>
-                          <div className="message-time">{msg.timestamp}</div>
+          {/* Chat Tab */}
+          <div className={`tab-panel ${activeTab !== 'chat' ? 'hidden' : ''}`}>
+            <div className="log-card">
+              <div className="chat-container" ref={chatContainerRef}>
+                {chatMessages.length === 0 ? (
+                  <div className="log-empty">No messages yet</div>
+                ) : (
+                  chatMessages.map((msg, index) => (
+                    <div key={index} className={`chat-message ${msg.sender === 'You' ? 'sent' : 'received'}`}>
+                      <div className="message-content">
+                        <div className="message-bubble">
+                          <div className="message-text">{msg.text}</div>
                         </div>
+                        <div className="message-time">{msg.timestamp}</div>
                       </div>
-                    ))
-                  )}
-                </div>
-               <div className='input-container'>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className='input-container'>
                 <input
-                    type="text"
-                    value={chatMessage}
-                    onChange={(e) => setChatMessage(e.target.value)}
-                    onKeyPress={handleChatKeyPress}
-                    placeholder="Type a message..."
-                    className="chat-input"
-                  />
-                  <button
-                    onClick={sendChatMessage}
-                    className="chat-send-btn"
-                    disabled={!chatMessage.trim()}
-                  >
-                    Send
-                  </button>
-               </div>
+                  type="text"
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  onKeyPress={handleChatKeyPress}
+                  placeholder="Type a message..."
+                  className="chat-input"
+                />
+                <button
+                  onClick={sendChatMessage}
+                  className="chat-send-btn"
+                  disabled={!chatMessage.trim()}
+                >
+                  Send
+                </button>
               </div>
             </div>
+          </div>
 
-            {/* Log Tab */}
-            <div className={`tab-panel ${activeTab !== 'log' ? 'hidden' : ''}`}>
-              <div className="log-card">
-                <div className="log-container" ref={logContainerRef}>
-                  {logs.length === 0 ? (
-                    <div className="log-empty">No logs yet</div>
-                  ) : (
-                    logs.map((log, index) => (
-                      <div key={index} className="log-entry">
-                        {log}
-                      </div>
-                    ))
-                  )}
-                </div>
+          {/* Log Tab */}
+          <div className={`tab-panel ${activeTab !== 'log' ? 'hidden' : ''}`}>
+            <div className="log-card">
+              <div className="log-container" ref={logContainerRef}>
+                {logs.length === 0 ? (
+                  <div className="log-empty">No logs yet</div>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={index} className="log-entry">
+                      {log}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-            
+          </div>
+
         </div>
       )}
     </div>
