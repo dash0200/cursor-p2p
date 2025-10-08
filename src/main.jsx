@@ -6,7 +6,7 @@ import WebRTCManualSignal from './components/WebRTCManualSignal.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
-    {/* <WebRTCManualSignal /> */}
+    {/* <App /> */}
+    <WebRTCManualSignal />
   </StrictMode>,
 )

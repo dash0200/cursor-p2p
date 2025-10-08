@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Copy, Check, Phone, PhoneOff, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Copy, Check, Phone, PhoneOff, Volume2, Play, Pause, Maximize, Upload } from 'lucide-react';
+import './WebRTCManualSignal.css';
 
 export default function WebRTCManualSignal() {
   const [localOffer, setLocalOffer] = useState('');
@@ -12,6 +13,9 @@ export default function WebRTCManualSignal() {
   const [remoteInVoiceChannel, setRemoteInVoiceChannel] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [logs, setLogs] = useState([]);
+  const [activeTab, setActiveTab] = useState('voice');
+  const [videoFile, setVideoFile] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -19,6 +23,8 @@ export default function WebRTCManualSignal() {
   const dataChannelRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const isNegotiatingRef = useRef(false);
+  const videoRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const addLog = (message) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -307,546 +313,246 @@ export default function WebRTCManualSignal() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleVideoFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type.startsWith('video/')) {
+      setVideoFile(file);
+      const videoUrl = URL.createObjectURL(file);
+      if (videoRef.current) {
+        videoRef.current.src = videoUrl;
+        // Auto-play the video after loading
+        videoRef.current.onloadeddata = () => {
+          videoRef.current.play().then(() => {
+            setIsPlaying(true);
+          }).catch((error) => {
+            console.log('Autoplay prevented:', error);
+          });
+        };
+      }
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        videoRef.current.play().then(() => {
+          setIsPlaying(true);
+        }).catch((error) => {
+          console.log('Play failed:', error);
+        });
+      }
+    }
+  };
+
+  // Add event listeners for video state changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      const handlePlay = () => setIsPlaying(true);
+      const handlePause = () => setIsPlaying(false);
+      const handleEnded = () => setIsPlaying(false);
+
+      video.addEventListener('play', handlePlay);
+      video.addEventListener('pause', handlePause);
+      video.addEventListener('ended', handleEnded);
+
+      return () => {
+        video.removeEventListener('play', handlePlay);
+        video.removeEventListener('pause', handlePause);
+        video.removeEventListener('ended', handleEnded);
+      };
+    }
+  }, [videoFile]);
+
   return (
-    <>
-      <style>
-        {`
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-          }
-        `}
-      </style>
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%)',
-        padding: '24px'
-      }}>
-        <div style={{ maxWidth: '1152px', margin: '0 auto' }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            padding: '24px',
-            marginBottom: '24px'
-          }}>
-            <h1 style={{
-              fontSize: '30px',
-              fontWeight: 'bold',
-              color: '#1f2937',
-              marginBottom: '8px'
-            }}>
-              WebRTC Voice Channel
-            </h1>
-            <p style={{
-              color: '#6b7280',
-              marginBottom: '16px'
-            }}>
-              Discord-style voice channel - join and start talking automatically
-            </p>
+    <div className="webrtc-container">
+      {/* Left Side (75%) */}
+      <div className="webrtc-left">
+        <div className="video-player-container">
+          <div className="video-player-wrapper">
+            <video
+              ref={videoRef}
+              className="video-player"
+              poster=""
+            >
+              <source src="" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
             
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px',
-              marginBottom: '16px',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '50%',
-                  backgroundColor: connectionState === 'connected' ? '#10b981' :
-                                  connectionState === 'connecting' ? '#f59e0b' :
-                                  connectionState === 'failed' ? '#ef4444' :
-                                  '#d1d5db'
-                }} />
-                <span style={{
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#374151'
-                }}>
-                  {connectionState}
-                </span>
-              </div>
-              {dataChannelRef.current && dataChannelRef.current.readyState === 'open' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2563eb' }}>
-                  <div style={{ width: '12px', height: '12px', backgroundColor: '#3b82f6', borderRadius: '50%' }} />
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Data Channel Open</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-        {connectionState !== 'connected' && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-            gap: '24px',
-            marginBottom: '24px'
-          }}>
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-              padding: '24px'
-            }}>
-              <h2 style={{
-                fontSize: '20px',
-                fontWeight: '600',
-                color: '#1f2937',
-                marginBottom: '16px'
-              }}>
-                Step 1: Create Connection
-              </h2>
-              
-              <button
-                onClick={createDataChannelOffer}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  fontWeight: '500',
-                  border: 'none',
-                  cursor: 'pointer',
-                  marginBottom: '16px',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#1d4ed8'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#2563eb'}
-              >
-                Create Offer
-              </button>
-
-              {localOffer && (
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '8px'
-                  }}>
-                    <label style={{
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      color: '#374151'
-                    }}>
-                      Your Offer:
-                    </label>
-                    <button
-                      onClick={() => copyToClipboard(localOffer)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '14px',
-                        color: '#2563eb',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer'
-                      }}
-                      onMouseOver={(e) => e.target.style.color = '#1d4ed8'}
-                      onMouseOut={(e) => e.target.style.color = '#2563eb'}
-                    >
-                      {copied ? <Check size={16} /> : <Copy size={16} />}
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                  <textarea
-                    value={localOffer}
-                    readOnly
-                    style={{
-                      width: '100%',
-                      height: '128px',
-                      padding: '12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      backgroundColor: '#f9fafb',
-                      resize: 'none'
-                    }}
-                  />
-                </div>
-              )}
-
-              {localAnswer && (
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '8px'
-                  }}>
-                    <label style={{
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      color: '#374151'
-                    }}>
-                      Your Answer:
-                    </label>
-                    <button
-                      onClick={() => copyToClipboard(localAnswer)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '14px',
-                        color: '#2563eb',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer'
-                      }}
-                      onMouseOver={(e) => e.target.style.color = '#1d4ed8'}
-                      onMouseOut={(e) => e.target.style.color = '#2563eb'}
-                    >
-                      {copied ? <Check size={16} /> : <Copy size={16} />}
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                  <textarea
-                    value={localAnswer}
-                    readOnly
-                    style={{
-                      width: '100%',
-                      height: '128px',
-                      padding: '12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      backgroundColor: '#f9fafb',
-                      resize: 'none'
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-              padding: '24px'
-            }}>
-              <h2 style={{
-                fontSize: '20px',
-                fontWeight: '600',
-                color: '#1f2937',
-                marginBottom: '16px'
-              }}>
-                Step 2: Exchange Descriptions
-              </h2>
-              
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#374151',
-                marginBottom: '8px'
-              }}>
-                Paste Remote Description:
-              </label>
-              <textarea
-                value={remoteDescription}
-                onChange={(e) => setRemoteDescription(e.target.value)}
-                placeholder="Paste the offer or answer from the other peer here..."
-                style={{
-                  width: '100%',
-                  height: '128px',
-                  padding: '12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  marginBottom: '16px',
-                  resize: 'none'
-                }}
-              />
-              
-              <button
-                onClick={handleRemoteDescription}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#059669',
-                  color: 'white',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  fontWeight: '500',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#047857'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#059669'}
-              >
-                Process Remote Description
-              </button>
-            </div>
-          </div>
-        )}
-
-        {connectionState === 'connected' && (
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            padding: '24px',
-            marginBottom: '24px'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '24px'
-            }}>
-              <h2 style={{
-                fontSize: '24px',
-                fontWeight: '600',
-                color: '#1f2937'
-              }}>
-                Voice Channel
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    backgroundColor: inVoiceChannel ? '#10b981' : '#d1d5db'
-                  }} />
-                  <span style={{
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151'
-                  }}>You</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    backgroundColor: remoteInVoiceChannel ? '#10b981' : '#d1d5db'
-                  }} />
-                  <span style={{
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151'
-                  }}>Remote Peer</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{
-              background: 'linear-gradient(90deg, #eef2ff 0%, #f3e8ff 100%)',
-              borderRadius: '8px',
-              padding: '32px',
-              marginBottom: '24px',
-              border: '2px solid #c7d2fe'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '24px'
-              }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    width: '80px',
-                    height: '80px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '12px',
-                    margin: '0 auto 12px auto',
-                    backgroundColor: inVoiceChannel ? '#10b981' : '#d1d5db'
-                  }}>
-                    <Volume2 style={{ color: 'white' }} size={32} />
-                  </div>
-                  <p style={{
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151'
-                  }}>You</p>
-                  <p style={{
-                    fontSize: '12px',
-                    color: '#6b7280'
-                  }}>{inVoiceChannel ? 'Connected' : 'Not in channel'}</p>
-                </div>
-
-                <div style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          width: '6px',
-                          borderRadius: '9999px',
-                          transition: 'all 0.3s ease',
-                          height: inVoiceChannel && remoteInVoiceChannel ? '32px' : '16px',
-                          backgroundColor: inVoiceChannel && remoteInVoiceChannel ? '#10b981' : '#d1d5db',
-                          animation: inVoiceChannel && remoteInVoiceChannel ? 'pulse 1.5s ease-in-out infinite' : 'none',
-                          animationDelay: `${i * 0.1}s`
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    width: '80px',
-                    height: '80px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '12px',
-                    margin: '0 auto 12px auto',
-                    backgroundColor: remoteInVoiceChannel ? '#10b981' : '#d1d5db'
-                  }}>
-                    <Volume2 style={{ color: 'white' }} size={32} />
-                  </div>
-                  <p style={{
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151'
-                  }}>Remote Peer</p>
-                  <p style={{
-                    fontSize: '12px',
-                    color: '#6b7280'
-                  }}>{remoteInVoiceChannel ? 'Connected' : 'Not in channel'}</p>
-                </div>
-              </div>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '16px'
-            }}>
-              {!inVoiceChannel ? (
-                <button
-                  onClick={joinVoiceChannel}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    backgroundColor: '#059669',
-                    color: 'white',
-                    padding: '12px 32px',
-                    borderRadius: '8px',
-                    fontWeight: '500',
-                    border: 'none',
-                    cursor: 'pointer',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                    transition: 'background-color 0.2s'
-                  }}
-                  onMouseOver={(e) => e.target.style.backgroundColor = '#047857'}
-                  onMouseOut={(e) => e.target.style.backgroundColor = '#059669'}
-                >
-                  <Phone size={20} />
-                  Join Voice Channel
-                </button>
-              ) : (
-                <>
+            {!videoFile && (
+              <div className="video-placeholder">
+                <div className="video-placeholder-content">
+                  <h3 className="video-placeholder-title">No Video Selected</h3>
+                  <p className="video-placeholder-subtitle">Choose a video file to start playing</p>
                   <button
-                    onClick={toggleMute}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '12px 24px',
-                      borderRadius: '8px',
-                      fontWeight: '500',
-                      border: 'none',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                      transition: 'background-color 0.2s',
-                      backgroundColor: isMuted ? '#dc2626' : '#374151',
-                      color: 'white'
-                    }}
-                    onMouseOver={(e) => e.target.style.backgroundColor = isMuted ? '#b91c1c' : '#1f2937'}
-                    onMouseOut={(e) => e.target.style.backgroundColor = isMuted ? '#dc2626' : '#374151'}
+                    className="video-select-btn"
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
-                    {isMuted ? 'Unmute' : 'Mute'}
+                    <Upload size={24} />
+                    Select Video File
                   </button>
-                  <button
-                    onClick={leaveVoiceChannel}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      backgroundColor: '#dc2626',
-                      color: 'white',
-                      padding: '12px 24px',
-                      borderRadius: '8px',
-                      fontWeight: '500',
-                      border: 'none',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onMouseOver={(e) => e.target.style.backgroundColor = '#b91c1c'}
-                    onMouseOut={(e) => e.target.style.backgroundColor = '#dc2626'}
-                  >
-                    <PhoneOff size={20} />
-                    Leave Channel
-                  </button>
-                </>
-              )}
-            </div>
-
-            <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
-          </div>
-        )}
-
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-          padding: '24px'
-        }}>
-          <h2 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#1f2937',
-            marginBottom: '16px'
-          }}>
-            Connection Log
-          </h2>
-          <div style={{
-            backgroundColor: '#f9fafb',
-            borderRadius: '8px',
-            padding: '16px',
-            height: '192px',
-            overflowY: 'auto',
-            fontFamily: 'monospace',
-            fontSize: '12px'
-          }}>
-            {logs.length === 0 ? (
-              <p style={{ color: '#9ca3af' }}>No events yet...</p>
-            ) : (
-              logs.map((log, i) => (
-                <div key={i} style={{ color: '#374151', marginBottom: '4px' }}>
-                  {log}
                 </div>
-              ))
+              </div>
+            )}
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              onChange={handleVideoFileSelect}
+              style={{ display: 'none' }}
+            />
+            
+            {videoFile && (
+              <div className="video-overlay">
+                <div className="video-controls">
+                  <button 
+                    className="video-control-btn"
+                    onClick={togglePlayPause}
+                  >
+                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                  </button>
+                  <div className="video-progress">
+                    <div className="progress-bar">
+                      <div className="progress-fill"></div>
+                    </div>
+                  </div>
+                  <div className="video-time">
+                    <span>00:00</span>
+                    <span>/</span>
+                    <span>00:00</span>
+                  </div>
+                  <button className="video-control-btn">
+                    <Volume2 size={16} />
+                  </button>
+                  <button className="video-control-btn">
+                    <Maximize size={16} />
+                  </button>
+                  <button 
+                    className="video-control-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Change Video"
+                  >
+                    <Upload size={16} />
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
-        </div>
       </div>
-    </>
+
+      {/* Neumorphic Gutter */}
+      <div className="webrtc-gutter"></div>
+
+      {/* Right Side (25%) */}
+      <div className="webrtc-right">
+        <div className="tabs-header">
+          <button
+            className={`tab-button ${activeTab === 'voice' ? 'active' : ''}`}
+            onClick={() => setActiveTab('voice')}
+          >
+            Voice Channels
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'log' ? 'active' : ''}`}
+            onClick={() => setActiveTab('log')}
+          >
+            Logs
+          </button>
+        </div>
+          
+            {/* Voice Channel Tab */}
+            <div className={`tab-panel ${activeTab !== 'voice' ? 'hidden' : ''}`}>
+              <div className="voice-channel-card">
+
+                <div className="voice-channel-visual">
+                  <div className="voice-avatar">
+                    <div className={`voice-avatar-circle ${inVoiceChannel ? 'active' : ''}`}>
+                      <Volume2 style={{ color: 'white' }} size={24} />
+                    </div>
+                    <p className="voice-avatar-name">You</p>
+                    <p className="voice-avatar-status">{inVoiceChannel ? 'Connected' : 'Not in channel'}</p>
+                  </div>
+
+                  <div className="audio-visualization">
+                    <div className="audio-bars">
+                      {[...Array(5)].map((_, i) => (
+                        <div
+                          key={i}
+                          className={`audio-bar ${inVoiceChannel && remoteInVoiceChannel ? 'active' : ''}`}
+                          style={{ animationDelay: `${i * 0.1}s` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="voice-avatar">
+                    <div className={`voice-avatar-circle ${remoteInVoiceChannel ? 'active' : ''}`}>
+                      <Volume2 style={{ color: 'white' }} size={24} />
+                    </div>
+                    <p className="voice-avatar-name">Remote</p>
+                    <p className="voice-avatar-status">{remoteInVoiceChannel ? 'Connected' : 'Not in channel'}</p>
+                  </div>
+                </div>
+
+                <div className="voice-controls">
+                  {!inVoiceChannel ? (
+                    <button
+                      onClick={joinVoiceChannel}
+                      className="voice-control-btn join"
+                    >
+                      <Phone size={16} />
+                      Join Voice
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={toggleMute}
+                        className={`voice-control-btn mute ${isMuted ? 'active' : ''}`}
+                      >
+                        {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                        {isMuted ? 'Unmute' : 'Mute'}
+                      </button>
+                      <button
+                        onClick={leaveVoiceChannel}
+                        className="voice-control-btn leave"
+                      >
+                        <PhoneOff size={16} />
+                        Leave
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <audio ref={remoteAudioRef} autoPlay className="webrtc-audio" />
+              </div>
+            </div>
+
+            {/* Log Tab */}
+            <div className={`tab-panel ${activeTab !== 'log' ? 'hidden' : ''}`}>
+              <div className="log-card">
+                <h2 className="log-title">
+                  Connection Log
+                </h2>
+                <div className="log-container">
+                  {logs.length === 0 ? (
+                    <p className="log-empty">No events yet...</p>
+                  ) : (
+                    logs.map((log, i) => (
+                      <div key={i} className="log-entry">
+                        {log}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            
+            </div>
+      </div>
+    </div>
   );
 }
