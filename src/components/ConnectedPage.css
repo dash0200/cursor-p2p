@@ -671,12 +671,6 @@
     inset -4px -4px 8px rgba(255, 255, 255, 0.05);
 }
 
-.files-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
 
 .chat-input-container {
   display: flex;
@@ -831,191 +825,21 @@
   }
 }
 
-/* File Sharing Styles */
-.file-upload-section {
-  padding: 1rem;
-  margin: 1rem;
-  border-radius: 12px;
-  background: #1a1a1a;
-  box-shadow: 
-    inset 4px 4px 8px rgba(0, 0, 0, 0.3),
-    inset -4px -4px 8px rgba(255, 255, 255, 0.05);
-}
 
-.upload-btn {
-  width: 100%;
-  padding: 0.75rem;
-  border: none;
-  border-radius: 12px;
-  background: #2a2a2a;
-  color: #e0e0e0;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  box-shadow: 
-    4px 4px 8px rgba(0, 0, 0, 0.3),
-    -4px -4px 8px rgba(255, 255, 255, 0.05);
-}
 
-.upload-btn:hover:not(:disabled) {
-  background: #3a3a3a;
-  transform: translateY(-1px);
-}
 
-.upload-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
 
-.transfer-history {
-  flex: 1;
-  padding: 1rem;
-  margin: 0 1rem 1rem 1rem;
-  overflow-y: auto;
-  background: #1a1a1a;
-  border-radius: 12px;
-  box-shadow: 
-    inset 4px 4px 8px rgba(0, 0, 0, 0.3),
-    inset -4px -4px 8px rgba(255, 255, 255, 0.05);
-}
 
-.transfer-history h4 {
-  color: #e0e0e0;
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-}
 
-.no-transfers {
-  text-align: center;
-  color: #666;
-  padding: 2rem 0;
-}
 
-.transfers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
 
-.transfer-item {
-  background: #1a1a1a;
-  border-radius: 12px;
-  padding: 1rem;
-  box-shadow: 
-    4px 4px 8px rgba(0, 0, 0, 0.3),
-    -4px -4px 8px rgba(255, 255, 255, 0.05);
-}
 
-.transfer-info {
-  margin-bottom: 0.75rem;
-}
 
-.transfer-name {
-  color: #e0e0e0;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  word-break: break-word;
-  font-size: 0.875rem;
-}
 
-.transfer-details {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-  font-size: 0.75rem;
-  color: #a0a0a0;
-}
 
-.transfer-progress {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
 
-.progress-bar {
-  flex: 1;
-  height: 4px;
-  background: #1a1a1a;
-  border-radius: 2px;
-  overflow: hidden;
-}
 
-.progress-fill {
-  height: 100%;
-  background: #1e40af;
-  transition: width 0.3s ease;
-}
 
-.progress-text {
-  font-size: 0.75rem;
-  color: #a0a0a0;
-  min-width: 35px;
-}
-
-.transfer-speed {
-  font-size: 0.75rem;
-  color: #1e40af;
-}
-
-.transfer-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.cancel-btn {
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 50%;
-  background: #ef4444;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.cancel-btn:hover {
-  background: #dc2626;
-  transform: scale(1.1);
-}
-
-.transfer-status {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  text-transform: capitalize;
-}
-
-.transfer-status.in_progress {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-}
-
-.transfer-status.completed {
-  background: rgba(30, 64, 175, 0.2);
-  color: #1e40af;
-}
-
-.transfer-status.canceled {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-}
-
-.transfer-status.checksum_mismatch {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-}
 
 
 /* Sidebar Toggle Button */

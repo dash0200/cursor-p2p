@@ -9,11 +9,6 @@ function ChatSidebar({
   sendMessage, 
   handleKeyPress,
   dataChannel,
-  fileTransfers,
-  sendFile,
-  cancelTransfer,
-  formatBytes,
-  formatSpeed,
   disconnect,
   inVoiceChannel,
   remoteInVoiceChannel,
@@ -31,7 +26,6 @@ function ChatSidebar({
   addMessage,
 }) {
   const messagesEndRef = useRef(null)
-  const fileInputRef = useRef(null)
   const [activeTab, setActiveTab] = useState('chat')
 
   const scrollToBottom = () => {
@@ -42,13 +36,6 @@ function ChatSidebar({
     scrollToBottom()
   }, [messages])
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      sendFile(file)
-      e.target.value = ''
-    }
-  }
 
   return (
     <div className="chat-sidebar">
@@ -65,12 +52,6 @@ function ChatSidebar({
             onClick={() => setActiveTab('voice')}
           >
             Voice
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'files' ? 'active' : ''}`}
-            onClick={() => setActiveTab('files')}
-          >
-            Files
           </button>
         </div>
         <div className="header-actions">
@@ -355,87 +336,6 @@ function ChatSidebar({
           </div>
         )}
 
-        {activeTab === 'files' && (
-          <div className="files-content">
-            <div className="file-upload-section">
-              <button 
-                className="upload-btn"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!dataChannel || dataChannel.readyState !== 'open'}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7,10 12,15 17,10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Upload File
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
-              />
-            </div>
-
-            <div className="transfer-history">
-              <h4>Transfer History</h4>
-              {fileTransfers.length === 0 ? (
-                <div className="no-transfers">
-                  <p>No file transfers yet</p>
-                </div>
-              ) : (
-                <div className="transfers-list">
-                  {fileTransfers.map(transfer => (
-                    <div key={transfer.id} className="transfer-item">
-                      <div className="transfer-info">
-                        <div className="transfer-name">{transfer.name}</div>
-                        <div className="transfer-details">
-                          <span className="transfer-direction">
-                            {transfer.direction === 'sent' ? 'Sent' : 'Received'}
-                          </span>
-                          <span className="transfer-size">{formatBytes(transfer.size)}</span>
-                        </div>
-                        <div className="transfer-progress">
-                          <div className="progress-bar">
-                            <div 
-                              className="progress-fill" 
-                              style={{ width: `${(transfer.progress || 0) * 100}%` }}
-                            ></div>
-                          </div>
-                          <span className="progress-text">
-                            {Math.round((transfer.progress || 0) * 100)}%
-                          </span>
-                        </div>
-                        {transfer.status === 'in_progress' && (
-                          <div className="transfer-speed">
-                            {formatSpeed(transfer.speedBps)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="transfer-actions">
-                        {transfer.status === 'in_progress' && (
-                          <button 
-                            className="cancel-btn"
-                            onClick={() => cancelTransfer(transfer.id)}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <line x1="18" y1="6" x2="6" y2="18"></line>
-                              <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                          </button>
-                        )}
-                        <div className={`transfer-status ${transfer.status}`}>
-                          {transfer.status}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
 
       </div>

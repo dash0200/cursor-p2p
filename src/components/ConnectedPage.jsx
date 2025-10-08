@@ -11,11 +11,6 @@ function ConnectedPage({
   sendMessage,
   handleKeyPress,
   dataChannel,
-  fileTransfers,
-  sendFile,
-  cancelTransfer,
-  formatBytes,
-  formatSpeed,
   disconnect,
   addMessage,
   inVoiceChannel,
@@ -144,11 +139,6 @@ function ConnectedPage({
             sendMessage={sendMessage}
             handleKeyPress={handleKeyPress}
             dataChannel={dataChannel}
-            fileTransfers={fileTransfers}
-            sendFile={sendFile}
-            cancelTransfer={cancelTransfer}
-            formatBytes={formatBytes}
-            formatSpeed={formatSpeed}
             disconnect={disconnect}
             inVoiceChannel={inVoiceChannel}
             remoteInVoiceChannel={remoteInVoiceChannel}

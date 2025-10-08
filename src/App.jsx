@@ -18,8 +18,6 @@ function App() {
   const [iceCandidates, setIceCandidates] = useState([])
   const [remoteIceCandidates, setRemoteIceCandidates] = useState([])
   const [signalingState, setSignalingState] = useState('stable')
-  const [fileTransfers, setFileTransfers] = useState([]) // history entries
-  const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window
   
   // Voice chat state
   const [inVoiceChannel, setInVoiceChannel] = useState(false)
@@ -31,12 +29,9 @@ function App() {
   
   
   const messagesEndRef = useRef(null)
-  const fileInputRef = useRef(null)
   const iceCandidateBuffer = useRef([])
   const isGatheringComplete = useRef(false)
   const messageIdCounter = useRef(0)
-  const incomingFilesRef = useRef(new Map()) // id -> { name, size, chunkSize, receivedBytes, expectedSeq, handle, writable, writer, runningCrc32, lastMeasureTime, lastMeasuredBytes }
-  const sendingFilesRef = useRef(new Map()) // id -> { file, chunkSize, reader, offset, seq, runningCrc32, abortController, lastMeasureTime, lastMeasuredBytes, canceled }
   
   // Voice chat refs
   const localStreamRef = useRef(null)
@@ -167,9 +162,7 @@ function App() {
     }
 
     pc.ontrack = (event) => {
-      
       if (event.track && event.track.kind === 'audio') {
-        
         if (remoteAudioRef.current && event.streams && event.streams[0]) {
           remoteAudioRef.current.srcObject = event.streams[0]
           remoteAudioRef.current.volume = 1.0
@@ -186,7 +179,6 @@ function App() {
         } else {
           addMessage('system', 'Remote audio element not ready')
         }
-      } else {
       }
     }
 
@@ -225,18 +217,6 @@ function App() {
     }
 
     channel.onmessage = async (event) => {
-      
-      // Binary chunks (ArrayBuffer) for file data
-      if (event.data instanceof ArrayBuffer) {
-        handleIncomingBinaryChunk(event.data)
-        return
-      }
-      // Some browsers deliver as Blob
-      if (event.data instanceof Blob) {
-        const buf = await event.data.arrayBuffer()
-        handleIncomingBinaryChunk(buf)
-        return
-      }
       // Handle string-based protocol messages (JSON)
       if (typeof event.data === 'string') {
        
@@ -244,49 +224,6 @@ function App() {
           const data = JSON.parse(event.data)
           if (data.type === 'message') {
             addMessage('remote', data.message)
-          } else if (data.type === 'file-offer') {
-            // Offer to send a file; receiver chooses save location and replies with accept and start offset
-            handleIncomingFileOffer(data)
-          } else if (data.type === 'file-accept') {
-            // Receiver accepted; begin sending from startOffset
-            const { id, startOffset } = data
-            const sending = sendingFilesRef.current.get(id)
-            if (sending) {
-              sending.offset = startOffset || 0
-              sending.seq = Math.floor((startOffset || 0) / sending.chunkSize)
-              // Start sending
-              void sendFileChunks(id)
-            }
-          } else if (data.type === 'chunk-nack') {
-            const { id, seq } = data
-            // Retransmit requested chunk
-            void retransmitChunk(id, seq)
-          } else if (data.type === 'file-complete-ack') {
-            const { id, receiverCrc32 } = data
-            const sending = sendingFilesRef.current.get(id)
-            if (sending) {
-              const ok = (sending.runningCrc32 >>> 0) === (receiverCrc32 >>> 0)
-              setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, status: ok ? 'completed' : 'checksum_mismatch', progress: 1 } : t))
-              if (ok) addMessage('system', `File delivered with checksum verified`)
-              sendingFilesRef.current.delete(id)
-            }
-          } else if (data.type === 'file-cancel') {
-            const { id, reason } = data
-            // If we are sending this file, stop sending
-            const sending = sendingFilesRef.current.get(id)
-            if (sending) {
-              sending.canceled = true
-              try { await sending.reader.cancel(reason || 'remote canceled') } catch (_) {}
-              sendingFilesRef.current.delete(id)
-            }
-            // If we are receiving this file, close writer
-            const recv = incomingFilesRef.current.get(id)
-            if (recv) {
-              try { if (recv.writer) await recv.writer.close() } catch (_) {}
-            incomingFilesRef.current.delete(id)
-            }
-            setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, status: 'canceled' } : t))
-            addMessage('system', `Transfer canceled by peer${reason ? `: ${reason}` : ''}`)
           } else if (data.type === 'ice-candidate') {
             if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
               try {
@@ -347,7 +284,6 @@ function App() {
         message: 'TEST MESSAGE FROM DATA CHANNEL'
       }
       dataChannel.send(JSON.stringify(testMessage))
-    } else {
     }
   }
 
@@ -540,7 +476,6 @@ function App() {
       dataChannel.send(JSON.stringify(messageData))
       addMessage('local', newMessage.trim())
       setNewMessage('')
-    } else {
     }
   }
 
@@ -550,345 +485,6 @@ function App() {
       sendMessage()
     }
   }
-
-  const sendFile = async (file) => {
-    if (!dataChannel || dataChannel.readyState !== 'open') return
-
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const chunkSize = 64 * 1024 // 64KB chunks, binary
-
-    setFileTransfers(prev => ([
-      ...prev,
-      { id, name: file.name, size: file.size, direction: 'sent', status: 'in_progress', progress: 0, transferred: 0, speedBps: 0 }
-    ]))
-
-    // Send offer/metadata first
-    dataChannel.send(JSON.stringify({
-      type: 'file-offer',
-      id, name: file.name, size: file.size, chunkSize
-    }))
-
-    // Prepare streaming reader
-    const reader = file.stream().getReader()
-    sendingFilesRef.current.set(id, {
-      file,
-      chunkSize,
-      reader,
-      offset: 0,
-      seq: 0,
-      runningCrc32: 0 ^ -1,
-      abortController: new AbortController(),
-      lastMeasureTime: performance.now(),
-      lastMeasuredBytes: 0,
-      canceled: false
-    })
-    // Wait for receiver to accept and send startOffset; if none, start at 0 after small grace
-    setTimeout(() => {
-      const sending = sendingFilesRef.current.get(id)
-      if (sending && sending.offset === 0 && sending.seq === 0) {
-        void sendFileChunks(id)
-      }
-    }, 500)
-  }
-
-  const downloadFile = (filename, content) => {
-    const link = document.createElement('a')
-    link.href = content
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  // CRC32 utilities for per-chunk and running checksum
-  const crc32TableRef = useRef(null)
-  const getCrc32Table = () => {
-    if (crc32TableRef.current) return crc32TableRef.current
-    const table = new Uint32Array(256)
-    for (let n = 0; n < 256; n++) {
-      let c = n
-      for (let k = 0; k < 8; k++) {
-        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)
-      }
-      table[n] = c >>> 0
-    }
-    crc32TableRef.current = table
-    return table
-  }
-  const computeChunkCrc32 = (crc, bytes) => {
-    const table = getCrc32Table()
-    let c = crc >>> 0
-    for (let i = 0; i < bytes.length; i++) {
-      c = table[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8)
-    }
-    return c >>> 0
-  }
-
-  // Binary packet: [1 byte type=1][4 bytes idLen][id utf-8][4 bytes seq][4 bytes chunkLen][4 bytes crc32][payload]
-  const makeChunkPacket = (id, seq, payload) => {
-    const idBytes = new TextEncoder().encode(id)
-    const headerSize = 1 + 4 + idBytes.length + 4 + 4 + 4
-    const buffer = new ArrayBuffer(headerSize + payload.byteLength)
-    const view = new DataView(buffer)
-    const u8 = new Uint8Array(buffer)
-    let offset = 0
-    view.setUint8(offset, 1); offset += 1
-    view.setUint32(offset, idBytes.length, true); offset += 4
-    u8.set(idBytes, offset); offset += idBytes.length
-    view.setUint32(offset, seq, true); offset += 4
-    view.setUint32(offset, payload.byteLength, true); offset += 4
-    // crc placeholder; compute over payload only
-    const payloadU8 = new Uint8Array(payload)
-    const crc = computeChunkCrc32(0 ^ -1, payloadU8) ^ -1
-    view.setUint32(offset, crc >>> 0, true); offset += 4
-    u8.set(payloadU8, offset)
-    return buffer
-  }
-
-  const parseChunkPacket = (buffer) => {
-    const view = new DataView(buffer)
-    const u8 = new Uint8Array(buffer)
-    let offset = 0
-    const type = view.getUint8(offset); offset += 1
-    if (type !== 1) return null
-    const idLen = view.getUint32(offset, true); offset += 4
-    const id = new TextDecoder().decode(u8.subarray(offset, offset + idLen)); offset += idLen
-    const seq = view.getUint32(offset, true); offset += 4
-    const len = view.getUint32(offset, true); offset += 4
-    const crc = view.getUint32(offset, true); offset += 4
-    const payload = u8.subarray(offset, offset + len)
-    return { id, seq, crc, payload }
-  }
-
-  const waitForBufferLow = () => {
-    return new Promise(resolve => {
-      const handler = () => {
-        dataChannel?.removeEventListener('bufferedamountlow', handler)
-        resolve()
-      }
-      if (dataChannel && dataChannel.bufferedAmount <= (dataChannel.bufferedAmountLowThreshold || 512 * 1024)) return resolve()
-      dataChannel?.addEventListener('bufferedamountlow', handler, { once: true })
-    })
-  }
-
-  const sendFileChunks = async (id) => {
-    const sending = sendingFilesRef.current.get(id)
-    if (!sending || !dataChannel || dataChannel.readyState !== 'open') return
-    const { reader, chunkSize, file } = sending
-    const totalBytes = file.size
-    // If resuming, skip bytes until reaching offset by reading and discarding
-    let toSkip = sending.offset
-    while (toSkip > 0) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const skipNow = Math.min(toSkip, value.byteLength)
-      toSkip -= skipNow
-      if (skipNow < value.byteLength) {
-        // Use remaining part of value as first payload
-        const firstPayload = value.subarray(skipNow)
-        await maybeBackpressure()
-        const packet = makeChunkPacket(id, sending.seq, firstPayload)
-        dataChannel.send(packet)
-        sending.runningCrc32 = computeChunkCrc32(sending.runningCrc32, firstPayload)
-        sending.seq += 1
-        sending.offset += firstPayload.byteLength
-        const now = performance.now()
-        const deltaBytes = sending.offset - sending.lastMeasuredBytes
-        const deltaMs = Math.max(1, now - sending.lastMeasureTime)
-        const speedBps = (deltaBytes * 1000) / deltaMs
-        sending.lastMeasuredBytes = sending.offset
-        sending.lastMeasureTime = now
-        const progress = Math.min(1, sending.offset / totalBytes)
-        setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, progress, transferred: sending.offset, speedBps } : t))
-        break
-      }
-    }
-    for (;;) {
-      if (sending.canceled) break
-      const { done, value } = await reader.read()
-      if (done) break
-      let chunk = value
-      let start = 0
-      while (start < chunk.byteLength) {
-        if (sending.canceled) break
-        const end = Math.min(start + chunkSize, chunk.byteLength)
-        const slice = chunk.subarray(start, end)
-        await maybeBackpressure()
-        const packet = makeChunkPacket(id, sending.seq, slice)
-        dataChannel.send(packet)
-        sending.runningCrc32 = computeChunkCrc32(sending.runningCrc32, slice)
-        sending.seq += 1
-        sending.offset += slice.byteLength
-        const now = performance.now()
-        const deltaBytes = sending.offset - sending.lastMeasuredBytes
-        const deltaMs = Math.max(1, now - sending.lastMeasureTime)
-        const speedBps = (deltaBytes * 1000) / deltaMs
-        sending.lastMeasuredBytes = sending.offset
-        sending.lastMeasureTime = now
-        const progress = Math.min(1, sending.offset / totalBytes)
-        setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, progress, transferred: sending.offset, speedBps } : t))
-        start = end
-      }
-    }
-    // Completed sending; wait for receiver ack with its crc32
-  }
-
-  const maybeBackpressure = async () => {
-    if (!dataChannel) return
-    if (dataChannel.bufferedAmount > (dataChannel.bufferedAmountLowThreshold || 512 * 1024)) {
-      await waitForBufferLow()
-    }
-  }
-
-  const retransmitChunk = async (id, seq) => {
-    const sending = sendingFilesRef.current.get(id)
-    if (!sending) return
-    // Re-read specific chunk from file by slicing
-    const start = seq * sending.chunkSize
-    const end = Math.min(start + sending.chunkSize, sending.file.size)
-    const blob = sending.file.slice(start, end)
-    const buf = new Uint8Array(await blob.arrayBuffer())
-    await maybeBackpressure()
-    const packet = makeChunkPacket(id, seq, buf)
-    dataChannel.send(packet)
-  }
-
-  const handleIncomingBinaryChunk = async (buffer) => {
-    const parsed = parseChunkPacket(buffer)
-    if (!parsed) return
-    const { id, seq, crc, payload } = parsed
-    const entry = incomingFilesRef.current.get(id)
-    if (!entry) return
-    const computed = (computeChunkCrc32(0 ^ -1, payload) ^ -1) >>> 0
-    if (computed !== (crc >>> 0)) {
-      // Request retransmit
-      dataChannel?.send(JSON.stringify({ type: 'chunk-nack', id, seq }))
-      return
-    }
-    // Enforce order by seq
-    const expectedSeq = entry.expectedSeq || 0
-    if (seq !== expectedSeq) {
-      // With reliable ordered channel, out-of-order shouldn't happen; request retransmit if gap
-      if (seq > expectedSeq) {
-        dataChannel?.send(JSON.stringify({ type: 'chunk-nack', id, seq: expectedSeq }))
-      }
-      return
-    }
-    // Write to file stream, or accumulate in-memory fallback
-    if (entry.writer) {
-      await entry.writer.write(payload)
-    } else if (entry.writable && entry.writable.write) {
-      await entry.writable.write(payload)
-    } else {
-      if (!entry.buffers) entry.buffers = []
-      // Ensure we store a copy
-      entry.buffers.push(new Uint8Array(payload))
-    }
-    entry.receivedBytes += payload.byteLength
-    entry.expectedSeq = expectedSeq + 1
-    entry.runningCrc32 = computeChunkCrc32(entry.runningCrc32, payload)
-    const now = performance.now()
-    if (!entry.lastMeasureTime) entry.lastMeasureTime = now
-    if (typeof entry.lastMeasuredBytes !== 'number') entry.lastMeasuredBytes = entry.receivedBytes
-    const deltaBytes = entry.receivedBytes - entry.lastMeasuredBytes
-    const deltaMs = Math.max(1, now - entry.lastMeasureTime)
-    const speedBps = (deltaBytes * 1000) / deltaMs
-    entry.lastMeasuredBytes = entry.receivedBytes
-    entry.lastMeasureTime = now
-    const progress = Math.min(1, entry.receivedBytes / entry.size)
-    setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, progress, transferred: entry.receivedBytes, speedBps } : t))
-    if (entry.receivedBytes >= entry.size) {
-      // Close stream and send ack with checksum
-      try {
-        if (entry.writer) await entry.writer.close()
-        if (entry.writable && entry.writable.close) await entry.writable.close()
-      } catch (_) {}
-      const receiverCrc32 = (entry.runningCrc32 ^ -1) >>> 0
-      dataChannel?.send(JSON.stringify({ type: 'file-complete-ack', id, receiverCrc32 }))
-      // If we used in-memory fallback, download now
-      if (!entry.writer && !(entry.writable && entry.writable.close) && entry.buffers && entry.buffers.length) {
-        const blob = new Blob(entry.buffers, { type: 'application/octet-stream' })
-        const url = URL.createObjectURL(blob)
-        downloadFile(entry.name, url)
-      }
-      setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, status: 'completed', progress: 1 } : t))
-      addMessage('system', `File received: ${entry.name}`)
-      incomingFilesRef.current.delete(id)
-    }
-  }
-
-  const handleIncomingFileOffer = async ({ id, name, size, chunkSize }) => {
-    try {
-      let startOffset = 0
-      let handle = null
-      let writer = null
-      let runningCrc32 = 0 ^ -1
-      if (supportsFS) {
-        try {
-          handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }] })
-          // Determine resume offset if file exists
-          const file = await handle.getFile().catch(() => null)
-          startOffset = file ? Math.min(file.size, size) : 0
-          const stream = await handle.createWritable({ keepExistingData: true })
-          if (startOffset > 0) await stream.seek(startOffset)
-          writer = stream
-        } catch (e) {
-          // User cancelled; fall back to in-memory and auto-download on complete
-        }
-      }
-      incomingFilesRef.current.set(id, {
-        name,
-        size,
-        chunkSize,
-        receivedBytes: startOffset,
-        expectedSeq: Math.floor(startOffset / chunkSize),
-        handle,
-        writable: writer,
-        writer,
-        runningCrc32,
-        lastMeasureTime: performance.now(),
-        lastMeasuredBytes: startOffset
-      })
-      setFileTransfers(prev => ([
-        ...prev,
-        { id, name, size, direction: 'received', status: 'in_progress', progress: (startOffset / size) || 0, transferred: startOffset, speedBps: 0 }
-      ]))
-      // Tell sender where to start
-      dataChannel?.send(JSON.stringify({ type: 'file-accept', id, startOffset }))
-    } catch (e) {
-      addMessage('system', `File offer failed: ${e.message}`)
-    }
-  }
-
-  const cancelTransfer = async (id, reason = 'canceled by user') => {
-    // Sender side
-    const sending = sendingFilesRef.current.get(id)
-    if (sending) {
-      sending.canceled = true
-      try { await sending.reader.cancel(reason) } catch (_) {}
-      sendingFilesRef.current.delete(id)
-    }
-    // Receiver side
-    const recv = incomingFilesRef.current.get(id)
-    if (recv) {
-      try { if (recv.writer) await recv.writer.close() } catch (_) {}
-      incomingFilesRef.current.delete(id)
-    }
-    // Inform peer
-    try { dataChannel?.send(JSON.stringify({ type: 'file-cancel', id, reason })) } catch (_) {}
-    setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, status: 'canceled' } : t))
-    addMessage('system', `Transfer canceled${reason ? `: ${reason}` : ''}`)
-  }
-
-  const formatBytes = (bytes = 0) => {
-    if (bytes < 1024) return `${bytes} B`
-    const units = ['KB','MB','GB','TB']
-    let i = -1
-    do { bytes = bytes / 1024; i++ } while (bytes >= 1024 && i < units.length - 1)
-    return `${bytes.toFixed(1)} ${units[i]}`
-  }
-
-  const formatSpeed = (bps = 0) => `${formatBytes(bps)}/s`
 
   const disconnect = () => {
     if (peerConnection) {
@@ -928,26 +524,11 @@ function App() {
   const sendVoiceMessage = (message) => {
     if (dataChannel && dataChannel.readyState === 'open') {
       dataChannel.send(JSON.stringify(message))
-    } else {
     }
   }
 
   const checkConnectionStatus = () => {
-    
-    if (peerConnection) {
-      const senders = peerConnection.getSenders()
-      senders.forEach((sender, i) => {
-      })
-      
-      const receivers = peerConnection.getReceivers()
-      receivers.forEach((receiver, i) => {
-        if (receiver.track && receiver.track.kind === 'audio') {
-        }
-      })
-    }
-    
-    if (remoteAudioRef.current) {
-    }
+    // Connection status checking logic can be added here if needed
   }
 
   const forcePlayRemoteAudio = () => {
@@ -977,6 +558,7 @@ function App() {
         return audioContext
       }
     } catch (error) {
+      // Audio context initialization failed
     }
   }
 
@@ -1184,7 +766,6 @@ function App() {
   }
 
   const leaveVoiceChannel = () => {
-    
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks()
       
@@ -1214,7 +795,6 @@ function App() {
     // Notify remote peer
     sendVoiceMessage({ type: 'voice-leave' })
     addMessage('system', 'Left voice channel')
-    
   }
 
   const toggleMute = () => {
@@ -1242,9 +822,6 @@ function App() {
 
 
 
-
-
-
   // Show ConnectedPage when connection is established
   if (connectionStatus === 'connected') {
     return (
@@ -1256,11 +833,6 @@ function App() {
         sendMessage={sendMessage}
         handleKeyPress={handleKeyPress}
         dataChannel={dataChannel}
-        fileTransfers={fileTransfers}
-        sendFile={sendFile}
-        cancelTransfer={cancelTransfer}
-        formatBytes={formatBytes}
-        formatSpeed={formatSpeed}
         disconnect={disconnect}
         addMessage={addMessage}
         inVoiceChannel={inVoiceChannel}
@@ -1302,13 +874,6 @@ function App() {
               disabled={connectionStatus !== 'connected'}
             >
               Chat
-            </button>
-            <button 
-              className={activeTab === 'files' ? 'nav-btn active' : 'nav-btn'}
-              onClick={() => setActiveTab('files')}
-              disabled={connectionStatus !== 'connected'}
-            >
-              Files
             </button>
           </nav>
         </div>
@@ -1480,77 +1045,12 @@ function App() {
             </div>
       </div>
         )}
-
-        {activeTab === 'files' && (
-          <div className="files">
-            <h2>File Sharing</h2>
-            <div className="file-container">
-              <div className="file-upload-section">
-                <h3>Send File</h3>
-                <div className="file-upload-area">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    onChange={(e) => {
-                      const file = e.target.files[0]
-                      if (file) {
-                        sendFile(file)
-                        e.target.value = ''
-                      }
-                    }}
-                    style={{ display: 'none' }}
-                  />
-                  <button 
-                    className="neumorphic-btn primary"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Choose File
-        </button>
-                  <p>Click to select a file to send</p>
-                </div>
-              </div>
-              
-              <div className="file-info">
-                <h3>Transfer History</h3>
-                {fileTransfers.length === 0 ? (
-                  <p style={{ color: '#a0a0a0' }}>No transfers yet.</p>
-                ) : (
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {fileTransfers.map(t => (
-                      <li key={t.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid #2a2a2a' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{t.name}</div>
-                            <div style={{ fontSize: '0.8rem', color: '#a0a0a0' }}>
-                              {t.direction === 'sent' ? 'Sent' : 'Received'} • {formatBytes(t.size)}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#a0a0a0' }}>
-                              {formatBytes(t.transferred || 0)} / {formatBytes(t.size)}
-                              {typeof t.speedBps === 'number' && t.status === 'in_progress' ? ` • ${formatSpeed(t.speedBps)}` : ''}
-                          </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                            <span>{Math.round((t.progress || 0) * 100)}% {t.status}</span>
-                            {t.status === 'in_progress' && (
-                              <button className="neumorphic-btn danger" onClick={() => cancelTransfer(t.id)}>Cancel</button>
-                            )}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </main>
       {toast && (
         <div className={`toast ${toast.type}`}>
           {toast.message}
         </div>
       )}
-
       </div>
   )
 }
