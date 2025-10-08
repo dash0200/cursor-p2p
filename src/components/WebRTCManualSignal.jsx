@@ -12,6 +12,7 @@ export default function WebRTCManualSignal() {
   const [inVoiceChannel, setInVoiceChannel] = useState(false);
   const [remoteInVoiceChannel, setRemoteInVoiceChannel] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
   const [logs, setLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('voice');
   const [videoFile, setVideoFile] = useState(null);
@@ -21,6 +22,10 @@ export default function WebRTCManualSignal() {
   const [volume, setVolume] = useState(1);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const logContainerRef = useRef(null);
+  const chatContainerRef = useRef(null);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -53,14 +58,12 @@ export default function WebRTCManualSignal() {
   const sendMessage = (message) => {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
       dataChannelRef.current.send(JSON.stringify(message));
-      addLog(`Sent: ${message.type}`);
     }
   };
 
   const handleDataChannelMessage = async (data) => {
     try {
       const message = JSON.parse(data);
-      addLog(`Received: ${message.type}`);
 
       if (message.type === 'offer') {
         if (isNegotiatingRef.current) {
@@ -106,6 +109,13 @@ export default function WebRTCManualSignal() {
           remoteAudioRef.current.srcObject = null;
         }
         addLog('Remote peer left voice channel');
+      } else if (message.type === 'chat') {
+        setChatMessages(prev => [...prev, {
+          type: 'chat',
+          text: message.text,
+          timestamp: message.timestamp,
+          sender: 'Remote'
+        }]);
       }
     } catch (err) {
       addLog(`Error handling message: ${err.message}`);
@@ -156,14 +166,8 @@ export default function WebRTCManualSignal() {
 
     pc.ontrack = (e) => {
       addLog('Received remote audio track');
-      // Store the remote stream but don't play it yet
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = e.streams[0];
-        addLog(`Remote audio stream set. We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
-        // Always pause initially - let the useEffect handle playback
-        remoteAudioRef.current.pause();
-        addLog('Remote audio paused - waiting for both peers to be in voice channel');
-      }
+      // Don't play remote audio - let peer listen to their own mic
+      addLog('Remote audio track received but not played (no audio feedback)');
     };
 
     pc.onnegotiationneeded = async () => {
@@ -304,6 +308,7 @@ export default function WebRTCManualSignal() {
   };
 
   const leaveVoiceChannel = () => {
+    console.log('Leave voice channel clicked');
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         track.stop();
@@ -330,12 +335,22 @@ export default function WebRTCManualSignal() {
   };
 
   const toggleMute = () => {
+    console.log('Toggle mute clicked, current state:', isMuted);
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(track => {
         track.enabled = !track.enabled;
       });
       setIsMuted(!isMuted);
       addLog(isMuted ? 'Unmuted' : 'Muted');
+    }
+  };
+
+  const toggleDeafen = () => {
+    console.log('Toggle deafen clicked, current state:', isDeafened);
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = !remoteAudioRef.current.muted;
+      setIsDeafened(!isDeafened);
+      addLog(isDeafened ? 'Undeafened' : 'Deafened');
     }
   };
 
@@ -418,31 +433,52 @@ export default function WebRTCManualSignal() {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const forceStartRemoteAudio = () => {
-    if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current && remoteAudioRef.current.srcObject) {
-      addLog('Force starting remote audio playback');
-      remoteAudioRef.current.play().catch(err => {
-        console.log('Force play failed:', err);
-        addLog('Force play failed - user interaction may be required');
-        // Try again after a short delay
-        setTimeout(() => {
-          if (remoteAudioRef.current && inVoiceChannel && remoteInVoiceChannel) {
-            addLog('Retrying remote audio playback after delay');
-            remoteAudioRef.current.play().catch(err2 => {
-              console.log('Retry also failed:', err2);
-              addLog('Retry also failed - may need user interaction');
-            });
-          }
-        }, 500);
-      });
-    } else {
-      addLog(`Cannot force start audio - inVoice: ${inVoiceChannel}, remoteInVoice: ${remoteInVoiceChannel}, hasStream: ${!!remoteAudioRef.current?.srcObject}`);
-    }
-  };
+  // forceStartRemoteAudio function removed - no audio feedback
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
+
+  const sendChatMessage = () => {
+    if (chatMessage.trim() && dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
+      const message = {
+        type: 'chat',
+        text: chatMessage.trim(),
+        timestamp: new Date().toLocaleTimeString(),
+        sender: 'You'
+      };
+      
+      setChatMessages(prev => [...prev, message]);
+      sendMessage({ type: 'chat', text: chatMessage.trim(), timestamp: message.timestamp });
+      setChatMessage('');
+    }
+  };
+
+  const handleChatKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  };
+
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      // Use requestAnimationFrame for smoother scrolling
+      requestAnimationFrame(() => {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      });
+    }
+  }, [chatMessages]);
+
+  // Auto-scroll logs container
+  useEffect(() => {
+    if (logContainerRef.current) {
+      requestAnimationFrame(() => {
+        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      });
+    }
+  }, [logs]);
 
   const toggleFullscreen = () => {
     if (!videoRef.current) return;
@@ -541,99 +577,9 @@ export default function WebRTCManualSignal() {
     }
   }, [videoFile]);
 
-  // Handle remote audio playback when voice channel state changes
-  useEffect(() => {
-    addLog(`Voice channel state changed - We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
-    
-    if (!remoteAudioRef.current) {
-      addLog('No remote audio element available');
-      return;
-    }
+  // Remote audio playback disabled - no audio feedback
 
-    if (inVoiceChannel && remoteInVoiceChannel) {
-      // Both peers are in voice channel, start playing remote audio
-      addLog('Both peers in voice channel - starting remote audio playback (useEffect)');
-      if (remoteAudioRef.current.srcObject) {
-        // Use the same logic as the manual button
-        forceStartRemoteAudio();
-      } else {
-        addLog('No remote audio stream available yet');
-      }
-    } else if (!inVoiceChannel) {
-      // We're not in voice channel, pause remote audio
-      addLog('We left voice channel - pausing remote audio');
-      remoteAudioRef.current.pause();
-    } else if (!remoteInVoiceChannel) {
-      // Remote peer is not in voice channel, pause remote audio
-      addLog('Remote peer left voice channel - pausing remote audio');
-      remoteAudioRef.current.pause();
-    }
-  }, [inVoiceChannel, remoteInVoiceChannel]);
-
-  // Add audio event listeners to handle when audio becomes ready
-  useEffect(() => {
-    const audio = remoteAudioRef.current;
-    if (!audio) return;
-
-    const handleCanPlay = () => {
-      addLog('Remote audio can play - checking if both peers are in voice channel');
-      if (inVoiceChannel && remoteInVoiceChannel) {
-        addLog('Both peers in voice channel - starting audio from canplay event');
-        forceStartRemoteAudio();
-      }
-    };
-    
-    const handleLoadedMetadata = () => {
-      addLog('Remote audio metadata loaded - checking if both peers are in voice channel');
-      if (inVoiceChannel && remoteInVoiceChannel) {
-        addLog('Both peers in voice channel - starting audio from loadedmetadata event');
-        forceStartRemoteAudio();
-      }
-    };
-
-    audio.addEventListener('canplay', handleCanPlay);
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-
-    return () => {
-      audio.removeEventListener('canplay', handleCanPlay);
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-    };
-  }, [inVoiceChannel, remoteInVoiceChannel]); // Re-add listeners when voice channel state changes
-
-  // Aggressive retry mechanism for audio playback
-  useEffect(() => {
-    if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current && remoteAudioRef.current.srcObject) {
-      addLog('Setting up aggressive audio retry mechanism');
-      
-      const retryAudio = () => {
-        if (remoteAudioRef.current && inVoiceChannel && remoteInVoiceChannel) {
-          addLog('Aggressive retry: attempting to start remote audio');
-          remoteAudioRef.current.play().catch(err => {
-            console.log('Aggressive retry failed:', err);
-            addLog('Aggressive retry failed - will try again');
-          });
-        }
-      };
-
-      // Try immediately
-      retryAudio();
-      
-      // Try after 1 second
-      const timeout1 = setTimeout(retryAudio, 1000);
-      
-      // Try after 2 seconds
-      const timeout2 = setTimeout(retryAudio, 2000);
-      
-      // Try after 3 seconds
-      const timeout3 = setTimeout(retryAudio, 3000);
-
-      return () => {
-        clearTimeout(timeout1);
-        clearTimeout(timeout2);
-        clearTimeout(timeout3);
-      };
-    }
-  }, [inVoiceChannel, remoteInVoiceChannel]);
+  // Audio event listeners and retry mechanisms removed - no audio feedback
 
   return (
     <div className={`webrtc-container ${connectionState === 'connected' ? 'connected' : ''} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -876,7 +822,13 @@ export default function WebRTCManualSignal() {
             className={`tab-button ${activeTab === 'voice' ? 'active' : ''}`}
             onClick={() => setActiveTab('voice')}
           >
-            Voice Channels
+            Voice
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            Chat
           </button>
           <button
             className={`tab-button ${activeTab === 'log' ? 'active' : ''}`}
@@ -884,44 +836,82 @@ export default function WebRTCManualSignal() {
           >
             Logs
           </button>
-                  </div>
+        </div>
           
             {/* Voice Channel Tab */}
             <div className={`tab-panel ${activeTab !== 'voice' ? 'hidden' : ''}`}>
               <div className="voice-channel-card">
 
                 <div className="voice-channel-visual">
-                  <div className="voice-avatar">
-                    <div className={`voice-avatar-circle ${inVoiceChannel ? 'active' : ''}`}>
-                      <Volume2 style={{ color: 'white' }} size={24} />
+                <div className="voice-channel-content">
+                  {!inVoiceChannel && !remoteInVoiceChannel ? (
+                    <div className="voice-empty-state">
+                      <div className="empty-icon">
+                        <MicOff size={32} />
+                      </div>
                     </div>
-                    <p className="voice-avatar-name">You</p>
-                    <p className="voice-avatar-status">{inVoiceChannel ? 'Connected' : 'Not in channel'}</p>
+                  ) : (
+                    <div className="voice-participants">
+                      {inVoiceChannel && (
+                        <div className="participant-item">
+                          <div className="avatar-container">
+                            <div className={`avatar-circle ${!isMuted ? 'speaking' : ''}`}>
+                              <Mic size={14} />
+                            </div>
+                          </div>
+                          <div className="participant-actions">
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleMute();
+                              }}
+                              className={`action-btn mute-btn ${isMuted ? 'active' : ''}`}
+                              title={isMuted ? 'Unmute' : 'Mute'}
+                            >
+                              {isMuted ? <MicOff size={14} /> : <Mic size={14} />}
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleDeafen();
+                              }}
+                              className={`action-btn deafen-btn ${isDeafened ? 'active' : ''}`}
+                              title={isDeafened ? 'Undeafen' : 'Deafen'}
+                            >
+                              {isDeafened ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                leaveVoiceChannel();
+                              }}
+                              className="action-btn leave-btn"
+                              title="Leave"
+                            >
+                              <PhoneOff size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {remoteInVoiceChannel && (
+                        <div className="participant-item">
+                          <div className="avatar-container">
+                            <div className="avatar-circle">
+                              <Volume2 size={14} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                  <div className="audio-visualization">
-                    <div className="audio-bars">
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                          className={`audio-bar ${inVoiceChannel && remoteInVoiceChannel ? 'active' : ''}`}
-                          style={{ animationDelay: `${i * 0.1}s` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                  <div className="voice-avatar">
-                    <div className={`voice-avatar-circle ${remoteInVoiceChannel ? 'active' : ''}`}>
-                      <Volume2 style={{ color: 'white' }} size={24} />
-                  </div>
-                    <p className="voice-avatar-name">Remote</p>
-                    <p className="voice-avatar-status">{remoteInVoiceChannel ? 'Connected' : 'Not in channel'}</p>
-              </div>
             </div>
 
-                <div className="voice-controls">
-              {!inVoiceChannel ? (
+              {!inVoiceChannel && (
                 <button
                   onClick={joinVoiceChannel}
                       className="voice-control-btn join"
@@ -929,51 +919,69 @@ export default function WebRTCManualSignal() {
                       <Phone size={16} />
                       Join Voice
                 </button>
-              ) : (
-                <>
-                  <button
-                    onClick={toggleMute}
-                        className={`voice-control-btn mute ${isMuted ? 'active' : ''}`}
-                      >
-                        {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
-                    {isMuted ? 'Unmute' : 'Mute'}
-                  </button>
-                  <button
-                    onClick={leaveVoiceChannel}
-                        className="voice-control-btn leave"
-                      >
-                        <PhoneOff size={16} />
-                        Leave
-                  </button>
-                </>
               )}
+
+                <audio ref={remoteAudioRef} className="webrtc-audio" />
+          </div>
             </div>
 
-                <audio ref={remoteAudioRef} autoPlay className="webrtc-audio" />
-          </div>
+            {/* Chat Tab */}
+            <div className={`tab-panel ${activeTab !== 'chat' ? 'hidden' : ''}`}>
+              <div className="log-card">
+                <div className="chat-container" ref={chatContainerRef}>
+                  {chatMessages.length === 0 ? (
+                    <div className="log-empty">No messages yet</div>
+                  ) : (
+                    chatMessages.map((msg, index) => (
+                      <div key={index} className={`chat-message ${msg.sender === 'You' ? 'sent' : 'received'}`}>
+                        <div className="message-content">
+                          <div className="message-bubble">
+                            <div className="message-text">{msg.text}</div>
+                          </div>
+                          <div className="message-time">{msg.timestamp}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="chat-input-container">
+                  <input
+                    type="text"
+                    value={chatMessage}
+                    onChange={(e) => setChatMessage(e.target.value)}
+                    onKeyPress={handleChatKeyPress}
+                    placeholder="Type a message..."
+                    className="chat-input"
+                  />
+                  <button
+                    onClick={sendChatMessage}
+                    className="chat-send-btn"
+                    disabled={!chatMessage.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Log Tab */}
             <div className={`tab-panel ${activeTab !== 'log' ? 'hidden' : ''}`}>
               <div className="log-card">
-                <h2 className="log-title">
-            Connection Log
-          </h2>
-                <div className="log-container">
-            {logs.length === 0 ? (
-                    <p className="log-empty">No events yet...</p>
-            ) : (
-              logs.map((log, i) => (
-                      <div key={i} className="log-entry">
-                  {log}
+                <div className="log-container" ref={logContainerRef}>
+                  {logs.length === 0 ? (
+                    <div className="log-empty">No logs yet</div>
+                  ) : (
+                    logs.map((log, index) => (
+                      <div key={index} className="log-entry">
+                        {log}
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              </div>
+            </div>
             
         </div>
-      </div>
       )}
     </div>
   );
