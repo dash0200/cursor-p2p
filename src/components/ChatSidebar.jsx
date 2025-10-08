@@ -15,14 +15,15 @@ function ChatSidebar({
   formatBytes,
   formatSpeed,
   disconnect,
-  // Audio props
-  isInAudioChannel,
-  joinAudioChannel,
-  leaveAudioChannel,
+  // Voice channel props
+  isInVoiceChannel,
+  remoteInVoiceChannel,
+  isMuted,
+  joinVoiceChannel,
+  leaveVoiceChannel,
+  toggleMute,
   localAudioStream,
   remoteAudioStream,
-  micActivity,
-  micVolume,
   isPeerConnectionReady,
   audioElementRef,
 }) {
@@ -215,12 +216,12 @@ function ChatSidebar({
           <div className="audio-content">
             <div className="audio-channel-section">
               <h4>Voice Channel</h4>
-              {!isInAudioChannel ? (
+              {!isInVoiceChannel ? (
                 <button 
                   className="join-audio-btn"
-                  onClick={joinAudioChannel}
+                  onClick={joinVoiceChannel}
                   disabled={!isPeerConnectionReady()}
-                  title={!isPeerConnectionReady() ? 'Connect to a peer first' : 'Join audio channel'}
+                  title={!isPeerConnectionReady() ? 'Connect to a peer first' : 'Join voice channel'}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -228,13 +229,13 @@ function ChatSidebar({
                     <line x1="12" y1="19" x2="12" y2="23"></line>
                     <line x1="8" y1="23" x2="16" y2="23"></line>
                   </svg>
-                  Join Audio Channel
+                  Join Voice Channel
                 </button>
               ) : (
                 <div className="audio-channel-active">
                   <div className="audio-status">
                     <div className="mic-indicator">
-                      <div className={`mic-icon ${micActivity ? 'active' : ''}`}>
+                      <div className={`mic-icon ${isMuted ? 'muted' : 'active'}`}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                           <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -244,42 +245,59 @@ function ChatSidebar({
                       </div>
                       <div className="mic-info">
                         <span className="mic-status">
-                          {micActivity ? 'Speaking...' : 'Connected'}
+                          {isMuted ? 'Muted' : 'Connected'}
                         </span>
-                        <div className="volume-meter">
-                          <div className="volume-bar">
-                            <div 
-                              className="volume-fill" 
-                              style={{ width: `${micVolume}%` }}
-                            ></div>
-                          </div>
-                          <span className="volume-text">{Math.round(micVolume)}%</span>
-                        </div>
                       </div>
                     </div>
-                    <button 
-                      className="leave-audio-btn"
-                      onClick={leaveAudioChannel}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
-                        <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
-                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                        <line x1="8" y1="23" x2="16" y2="23"></line>
-                        <line x1="1" y1="1" x2="23" y2="23"></line>
-                      </svg>
-                      Leave Channel
-                    </button>
+                    <div className="audio-controls">
+                      <button 
+                        className={`mute-btn ${isMuted ? 'muted' : ''}`}
+                        onClick={toggleMute}
+                        title={isMuted ? 'Unmute' : 'Mute'}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          {isMuted ? (
+                            <>
+                              <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                              <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+                              <line x1="12" y1="19" x2="12" y2="23"></line>
+                              <line x1="8" y1="23" x2="16" y2="23"></line>
+                              <line x1="1" y1="1" x2="23" y2="23"></line>
+                            </>
+                          ) : (
+                            <>
+                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                              <line x1="12" y1="19" x2="12" y2="23"></line>
+                              <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </>
+                          )}
+                        </svg>
+                      </button>
+                      <button 
+                        className="leave-audio-btn"
+                        onClick={leaveVoiceChannel}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                          <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+                          <line x1="12" y1="19" x2="12" y2="23"></line>
+                          <line x1="8" y1="23" x2="16" y2="23"></line>
+                          <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                        Leave Channel
+                      </button>
+                    </div>
                   </div>
                   
-                  {remoteAudioStream && (
+                  {remoteInVoiceChannel && (
                     <div className="remote-audio-info">
                       <div className="remote-speaker-indicator">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                           <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                         </svg>
-                        <span>Remote peer is speaking</span>
+                        <span>Remote peer in voice channel</span>
                       </div>
                       <button 
                         className="test-audio-btn"

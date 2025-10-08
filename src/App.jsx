@@ -21,13 +21,12 @@ function App() {
   const [fileTransfers, setFileTransfers] = useState([]) // history entries
   const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window
   
-  // Audio channel state
-  const [isInAudioChannel, setIsInAudioChannel] = useState(false)
+  // Voice channel state
+  const [isInVoiceChannel, setIsInVoiceChannel] = useState(false)
+  const [remoteInVoiceChannel, setRemoteInVoiceChannel] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
   const [localAudioStream, setLocalAudioStream] = useState(null)
   const [remoteAudioStream, setRemoteAudioStream] = useState(null)
-  const [micActivity, setMicActivity] = useState(false)
-  const [micVolume, setMicVolume] = useState(0)
-  const [audioChannelReady, setAudioChannelReady] = useState(false)
   
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -36,13 +35,8 @@ function App() {
   const messageIdCounter = useRef(0)
   const incomingFilesRef = useRef(new Map()) // id -> { name, size, chunkSize, receivedBytes, expectedSeq, handle, writable, writer, runningCrc32, lastMeasureTime, lastMeasuredBytes }
   const sendingFilesRef = useRef(new Map()) // id -> { file, chunkSize, reader, offset, seq, runningCrc32, abortController, lastMeasureTime, lastMeasuredBytes, canceled }
-  const audioContextRef = useRef(null)
-  const analyserRef = useRef(null)
-  const micActivityIntervalRef = useRef(null)
-  const pendingAudioOffersRef = useRef([])
-  const pendingAudioAnswersRef = useRef([])
-  const pendingAudioIceCandidatesRef = useRef([])
   const audioElementRef = useRef(null)
+  const isNegotiatingRef = useRef(false)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -132,22 +126,13 @@ function App() {
       console.log('🔗 Connection state:', pc.connectionState)
       if (pc.connectionState === 'connected') {
         setConnectionStatus('connected')
-        setAudioChannelReady(true)
         addMessage('system', 'Connection established!')
-        console.log('🎵 Audio channel ready for use')
-        // Process any pending audio offers/answers when connection is established
-        setTimeout(() => {
-          processPendingAudioOffers()
-          processPendingAudioAnswers()
-          processPendingAudioIceCandidates()
-        }, 1000) // Small delay to ensure connection is fully stable
+        console.log('🎵 Voice channel ready for use')
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         setConnectionStatus('disconnected')
-        setAudioChannelReady(false)
         addMessage('system', 'Connection lost')
       } else if (pc.connectionState === 'connecting') {
         setConnectionStatus('connecting')
-        setAudioChannelReady(false)
         addMessage('system', 'Connecting...')
       }
     }
@@ -177,10 +162,31 @@ function App() {
       if (event.track.kind === 'audio') {
         console.log('🎵 Remote audio track received:', event.track)
         console.log('🎵 Remote audio stream:', event.streams[0])
-        console.log('🎵 Track state:', event.track.readyState)
         setRemoteAudioStream(event.streams[0])
         attachRemoteAudioToElement(event.streams[0])
         addMessage('system', 'Remote audio stream received')
+      }
+    }
+
+    pc.onnegotiationneeded = async () => {
+      try {
+        if (dataChannel && dataChannel.readyState === 'open' && !isNegotiatingRef.current) {
+          isNegotiatingRef.current = true
+          console.log('🎵 Negotiation needed - creating offer')
+          addMessage('system', 'Negotiating audio connection...')
+          const offer = await pc.createOffer()
+          await pc.setLocalDescription(offer)
+          
+          const offerData = {
+            type: 'offer',
+            sdp: pc.localDescription
+          }
+          dataChannel.send(JSON.stringify(offerData))
+        }
+      } catch (err) {
+        console.error('🎵 Negotiation error:', err)
+        addMessage('system', 'Audio negotiation error: ' + err.message)
+        isNegotiatingRef.current = false
       }
     }
 
@@ -197,11 +203,6 @@ function App() {
       console.log('📡 DATA CHANNEL OPENED')
       setConnectionStatus('connected')
       addMessage('system', 'Data channel opened - ready to chat!')
-      // Process any pending audio offers/answers when data channel opens
-      setTimeout(() => {
-        processPendingAudioOffers()
-        processPendingAudioAnswers()
-      }, 500) // Small delay to ensure data channel is fully ready
     }
 
     channel.onmessage = async (event) => {
@@ -281,88 +282,46 @@ function App() {
           } else if (data.type === 'audio-leave') {
             addMessage('system', 'Remote peer left audio channel')
             setRemoteAudioStream(null)
-          } else if (data.type === 'audio-offer') {
-            console.log('🎵 Received audio offer from remote peer:', data.offer)
-            console.log('🎵 Current peerConnection state:', peerConnection ? {
-              connectionState: peerConnection.connectionState,
-              iceConnectionState: peerConnection.iceConnectionState,
-              signalingState: peerConnection.signalingState
-            } : 'null')
-            
-            if (!peerConnection) {
-              console.error('🎵 Cannot handle audio offer: peerConnection is null - queuing offer')
-              pendingAudioOffersRef.current.push(data.offer)
-              addMessage('system', 'Audio offer queued - waiting for connection')
+          } else if (data.type === 'offer') {
+            if (isNegotiatingRef.current) {
+              console.log('🎵 Already negotiating, ignoring offer')
               return
             }
-            
-            if (peerConnection.connectionState === 'closed' || peerConnection.connectionState === 'failed') {
-              console.error('🎵 Cannot handle audio offer: peerConnection is closed or failed - queuing offer')
-              pendingAudioOffersRef.current.push(data.offer)
-              addMessage('system', 'Audio offer queued - connection not ready')
-              return
-            }
+            isNegotiatingRef.current = true
             
             try {
-              await peerConnection.setRemoteDescription(data.offer)
+              await peerConnection.setRemoteDescription(data.sdp)
               const answer = await peerConnection.createAnswer()
               await peerConnection.setLocalDescription(answer)
               
-              // Send answer back to remote peer
-              if (dataChannel && dataChannel.readyState === 'open') {
-                const answerData = {
-                  type: 'audio-answer',
-                  answer: {
-                    type: answer.type,
-                    sdp: answer.sdp
-                  }
-                }
-                console.log('🎵 Sending audio answer to remote peer:', answerData)
-                dataChannel.send(JSON.stringify(answerData))
+              const answerData = {
+                type: 'answer',
+                sdp: peerConnection.localDescription
               }
-              
-              addMessage('system', 'Audio offer received and answered')
+              dataChannel.send(JSON.stringify(answerData))
+              isNegotiatingRef.current = false
+              addMessage('system', 'Audio renegotiation completed')
             } catch (error) {
-              console.error('🎵 Error handling audio offer:', error)
+              console.error('🎵 Error handling offer:', error)
               addMessage('system', 'Error handling audio offer: ' + error.message)
+              isNegotiatingRef.current = false
             }
-          } else if (data.type === 'audio-answer') {
-            console.log('🎵 Received audio answer from remote peer:', data.answer)
-            if (!peerConnection) {
-              console.error('🎵 Cannot handle audio answer: peerConnection is null - queuing answer')
-              pendingAudioAnswersRef.current.push(data.answer)
-              addMessage('system', 'Audio answer queued - waiting for connection')
-              return
-            }
-            
-            if (peerConnection.connectionState === 'closed' || peerConnection.connectionState === 'failed') {
-              console.error('🎵 Cannot handle audio answer: peerConnection is closed or failed - queuing answer')
-              pendingAudioAnswersRef.current.push(data.answer)
-              addMessage('system', 'Audio answer queued - connection not ready')
-              return
-            }
-            
+          } else if (data.type === 'answer') {
             try {
-              await peerConnection.setRemoteDescription(data.answer)
-              addMessage('system', 'Audio answer received and processed')
+              await peerConnection.setRemoteDescription(data.sdp)
+              isNegotiatingRef.current = false
+              addMessage('system', 'Audio renegotiation completed')
             } catch (error) {
-              console.error('🎵 Error handling audio answer:', error)
+              console.error('🎵 Error handling answer:', error)
               addMessage('system', 'Error handling audio answer: ' + error.message)
+              isNegotiatingRef.current = false
             }
-          } else if (data.type === 'ice-candidate') {
-            console.log('🔗 Received ICE candidate from remote peer:', data.candidate)
-            if (!peerConnection) {
-              console.error('🔗 Cannot handle ICE candidate: peerConnection is null - queuing candidate')
-              pendingAudioIceCandidatesRef.current.push(data.candidate)
-              return
-            }
-            
-            try {
-              await peerConnection.addIceCandidate(data.candidate)
-              console.log('🔗 ICE candidate added successfully')
-            } catch (error) {
-              console.error('🔗 Error adding ICE candidate:', error)
-            }
+          } else if (data.type === 'voice-join') {
+            setRemoteInVoiceChannel(true)
+            addMessage('system', 'Remote peer joined voice channel')
+          } else if (data.type === 'voice-leave') {
+            setRemoteInVoiceChannel(false)
+            addMessage('system', 'Remote peer left voice channel')
           }
         } catch (e) {
           console.log('📨 JSON PARSE ERROR:', e)
@@ -950,15 +909,10 @@ function App() {
   const formatSpeed = (bps = 0) => `${formatBytes(bps)}/s`
 
   const disconnect = () => {
-    // Clean up audio resources
-    if (isInAudioChannel) {
-      leaveAudioChannel()
+    // Clean up voice channel resources
+    if (isInVoiceChannel) {
+      leaveVoiceChannel()
     }
-    
-    // Clear pending audio offers/answers/ICE candidates
-    pendingAudioOffersRef.current = []
-    pendingAudioAnswersRef.current = []
-    pendingAudioIceCandidatesRef.current = []
     
     if (peerConnection) {
       peerConnection.close()
@@ -985,81 +939,13 @@ function App() {
     setMessages([])
   }
 
-  // Audio channel functions
+  // Voice channel functions
   const isPeerConnectionReady = () => {
     return peerConnection && 
            peerConnection.connectionState !== 'closed' && 
            peerConnection.connectionState !== 'failed' &&
            dataChannel && 
            dataChannel.readyState === 'open'
-  }
-
-  const processPendingAudioOffers = async () => {
-    if (!isPeerConnectionReady()) return
-
-    console.log('🎵 Processing pending audio offers:', pendingAudioOffersRef.current.length)
-    
-    while (pendingAudioOffersRef.current.length > 0) {
-      const offer = pendingAudioOffersRef.current.shift()
-      try {
-        console.log('🎵 Processing pending audio offer:', offer)
-        await peerConnection.setRemoteDescription(offer)
-        const answer = await peerConnection.createAnswer()
-        await peerConnection.setLocalDescription(answer)
-        
-        // Send answer back to remote peer
-        if (dataChannel && dataChannel.readyState === 'open') {
-          const answerData = {
-            type: 'audio-answer',
-            answer: {
-              type: answer.type,
-              sdp: answer.sdp
-            }
-          }
-          console.log('🎵 Sending audio answer to remote peer:', answerData)
-          dataChannel.send(JSON.stringify(answerData))
-        }
-        
-        addMessage('system', 'Pending audio offer processed')
-      } catch (error) {
-        console.error('🎵 Error processing pending audio offer:', error)
-        addMessage('system', 'Error processing pending audio offer: ' + error.message)
-      }
-    }
-  }
-
-  const processPendingAudioAnswers = async () => {
-    if (!isPeerConnectionReady()) return
-
-    console.log('🎵 Processing pending audio answers:', pendingAudioAnswersRef.current.length)
-    
-    while (pendingAudioAnswersRef.current.length > 0) {
-      const answer = pendingAudioAnswersRef.current.shift()
-      try {
-        console.log('🎵 Processing pending audio answer:', answer)
-        await peerConnection.setRemoteDescription(answer)
-        addMessage('system', 'Pending audio answer processed')
-      } catch (error) {
-        console.error('🎵 Error processing pending audio answer:', error)
-        addMessage('system', 'Error processing pending audio answer: ' + error.message)
-      }
-    }
-  }
-
-  const processPendingAudioIceCandidates = async () => {
-    if (!isPeerConnectionReady()) return
-
-    console.log('🔗 Processing pending ICE candidates:', pendingAudioIceCandidatesRef.current.length)
-    
-    while (pendingAudioIceCandidatesRef.current.length > 0) {
-      const candidate = pendingAudioIceCandidatesRef.current.shift()
-      try {
-        console.log('🔗 Processing pending ICE candidate:', candidate)
-        await peerConnection.addIceCandidate(candidate)
-      } catch (error) {
-        console.error('🔗 Error processing pending ICE candidate:', error)
-      }
-    }
   }
 
   const attachRemoteAudioToElement = (stream) => {
@@ -1089,165 +975,65 @@ function App() {
     }
   }
 
-  const joinAudioChannel = async () => {
-    console.log('🎵 Attempting to join audio channel')
-    
-    // Check if peer connection is ready
+  const joinVoiceChannel = async () => {
     if (!isPeerConnectionReady()) {
-      console.error('🎵 Cannot join audio channel: peer connection not ready')
-      addMessage('system', 'Cannot join audio channel: peer connection not ready')
+      addMessage('system', 'Please establish a connection first')
       return
     }
 
     try {
-      // Request microphone permission
-      console.log('🎵 Requesting microphone access')
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        } 
-      })
-      
-      console.log('🎵 Microphone access granted, stream:', stream)
+      addMessage('system', 'Joining voice channel...')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       setLocalAudioStream(stream)
-      setIsInAudioChannel(true)
-      
-      // Add audio track to peer connection
-      const audioTrack = stream.getAudioTracks()[0]
-      console.log('🎵 Adding audio track to peer connection:', audioTrack)
-      peerConnection.addTrack(audioTrack, stream)
-      
-      // Create new offer to include audio track
-      console.log('🎵 Creating audio offer')
-      const offer = await peerConnection.createOffer()
-      await peerConnection.setLocalDescription(offer)
-      
-      // Send the new offer to remote peer via data channel
-      if (dataChannel && dataChannel.readyState === 'open') {
-        const offerData = {
-          type: 'audio-offer',
-          offer: {
-            type: offer.type,
-            sdp: offer.sdp
-          }
-        }
-        console.log('🎵 Sending audio offer to remote peer:', offerData)
-        dataChannel.send(JSON.stringify(offerData))
-      }
-      
-      // Set up microphone activity monitoring
-      setupMicActivityMonitoring(stream)
-      
+      setIsInVoiceChannel(true)
+
+      // Add audio tracks to peer connection
+      stream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, stream)
+      })
+
       // Notify remote peer
       if (dataChannel && dataChannel.readyState === 'open') {
-        dataChannel.send(JSON.stringify({ type: 'audio-join' }))
+        dataChannel.send(JSON.stringify({ type: 'voice-join' }))
       }
       
-      addMessage('system', 'Joined audio channel - microphone active')
-      console.log('🎵 Successfully joined audio channel')
-      
-    } catch (error) {
-      console.error('🎵 Error joining audio channel:', error)
-      addMessage('system', 'Failed to join audio channel: ' + error.message)
-      
-      // Clean up on error
-      if (localAudioStream) {
-        localAudioStream.getTracks().forEach(track => track.stop())
-        setLocalAudioStream(null)
-        setIsInAudioChannel(false)
-      }
+      addMessage('system', 'Joined voice channel - audio streaming')
+    } catch (err) {
+      addMessage('system', 'Error joining voice channel: ' + err.message)
     }
   }
 
-  const leaveAudioChannel = () => {
-    console.log('🎵 Leaving audio channel')
-    
-    // Stop local audio stream
+  const leaveVoiceChannel = () => {
     if (localAudioStream) {
-      console.log('🎵 Stopping local audio stream')
-      localAudioStream.getTracks().forEach(track => track.stop())
-      setLocalAudioStream(null)
-    }
-    
-    // Remove audio track from peer connection
-    if (peerConnection) {
-      console.log('🎵 Removing audio track from peer connection')
-      const senders = peerConnection.getSenders()
-      senders.forEach(sender => {
-        if (sender.track && sender.track.kind === 'audio') {
+      localAudioStream.getTracks().forEach(track => {
+        track.stop()
+        const senders = peerConnection.getSenders()
+        const sender = senders.find(s => s.track === track)
+        if (sender) {
           peerConnection.removeTrack(sender)
         }
       })
+      setLocalAudioStream(null)
     }
     
-    // Stop mic activity monitoring
-    if (micActivityIntervalRef.current) {
-      clearInterval(micActivityIntervalRef.current)
-      micActivityIntervalRef.current = null
-    }
-    
-    // Clean up audio context
-    if (audioContextRef.current) {
-      audioContextRef.current.close()
-      audioContextRef.current = null
-    }
-    
-    // Clear remote audio stream
-    setRemoteAudioStream(null)
-    if (audioElementRef.current) {
-      audioElementRef.current.srcObject = null
-    }
-    
-    setIsInAudioChannel(false)
-    setMicActivity(false)
-    setMicVolume(0)
+    setIsInVoiceChannel(false)
+    setIsMuted(false)
     
     // Notify remote peer
     if (dataChannel && dataChannel.readyState === 'open') {
-      dataChannel.send(JSON.stringify({ type: 'audio-leave' }))
+      dataChannel.send(JSON.stringify({ type: 'voice-leave' }))
     }
     
-    addMessage('system', 'Left audio channel')
-    console.log('🎵 Successfully left audio channel')
+    addMessage('system', 'Left voice channel')
   }
 
-  const setupMicActivityMonitoring = (stream) => {
-    try {
-      // Create audio context for analyzing microphone input
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
-      analyserRef.current = audioContextRef.current.createAnalyser()
-      
-      const source = audioContextRef.current.createMediaStreamSource(stream)
-      source.connect(analyserRef.current)
-      
-      analyserRef.current.fftSize = 256
-      const bufferLength = analyserRef.current.frequencyBinCount
-      const dataArray = new Uint8Array(bufferLength)
-      
-      // Monitor microphone activity and volume
-      micActivityIntervalRef.current = setInterval(() => {
-        analyserRef.current.getByteFrequencyData(dataArray)
-        
-        // Calculate average volume
-        let sum = 0
-        for (let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i]
-        }
-        const average = sum / bufferLength
-        
-        // Normalize volume to 0-100 scale
-        const normalizedVolume = Math.min(100, (average / 255) * 100)
-        setMicVolume(normalizedVolume)
-        
-        // Consider activity if average volume is above threshold
-        const isActive = average > 10
-        setMicActivity(isActive)
-      }, 100)
-      
-    } catch (error) {
-      console.error('Error setting up mic activity monitoring:', error)
+  const toggleMute = () => {
+    if (localAudioStream) {
+      localAudioStream.getAudioTracks().forEach(track => {
+        track.enabled = !track.enabled
+      })
+      setIsMuted(!isMuted)
+      addMessage('system', isMuted ? 'Unmuted' : 'Muted')
     }
   }
 
@@ -1269,14 +1055,15 @@ function App() {
         formatSpeed={formatSpeed}
         disconnect={disconnect}
         addMessage={addMessage}
-        // Audio props
-        isInAudioChannel={isInAudioChannel}
-        joinAudioChannel={joinAudioChannel}
-        leaveAudioChannel={leaveAudioChannel}
+        // Voice channel props
+        isInVoiceChannel={isInVoiceChannel}
+        remoteInVoiceChannel={remoteInVoiceChannel}
+        isMuted={isMuted}
+        joinVoiceChannel={joinVoiceChannel}
+        leaveVoiceChannel={leaveVoiceChannel}
+        toggleMute={toggleMute}
         localAudioStream={localAudioStream}
         remoteAudioStream={remoteAudioStream}
-        micActivity={micActivity}
-        micVolume={micVolume}
         isPeerConnectionReady={isPeerConnectionReady}
         audioElementRef={audioElementRef}
       />

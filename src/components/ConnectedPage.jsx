@@ -18,14 +18,15 @@ function ConnectedPage({
   formatSpeed,
   disconnect,
   addMessage,
-  // Audio props
-  isInAudioChannel,
-  joinAudioChannel,
-  leaveAudioChannel,
+  // Voice channel props
+  isInVoiceChannel,
+  remoteInVoiceChannel,
+  isMuted,
+  joinVoiceChannel,
+  leaveVoiceChannel,
+  toggleMute,
   localAudioStream,
   remoteAudioStream,
-  micActivity,
-  micVolume,
   isPeerConnectionReady,
   audioElementRef,
 }) {
@@ -150,14 +151,15 @@ function ConnectedPage({
             formatBytes={formatBytes}
             formatSpeed={formatSpeed}
             disconnect={disconnect}
-            // Audio props
-            isInAudioChannel={isInAudioChannel}
-            joinAudioChannel={joinAudioChannel}
-            leaveAudioChannel={leaveAudioChannel}
+            // Voice channel props
+            isInVoiceChannel={isInVoiceChannel}
+            remoteInVoiceChannel={remoteInVoiceChannel}
+            isMuted={isMuted}
+            joinVoiceChannel={joinVoiceChannel}
+            leaveVoiceChannel={leaveVoiceChannel}
+            toggleMute={toggleMute}
             localAudioStream={localAudioStream}
             remoteAudioStream={remoteAudioStream}
-            micActivity={micActivity}
-            micVolume={micVolume}
             isPeerConnectionReady={isPeerConnectionReady}
             audioElementRef={audioElementRef}
           />
