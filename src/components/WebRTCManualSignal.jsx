@@ -98,10 +98,12 @@ export default function WebRTCManualSignal() {
         addLog('Remote peer joined voice channel');
         // If we're also in voice, start playing remote audio
         if (inVoiceChannel && remoteAudioRef.current) {
-          addLog('Both peers in voice channel');
+          addLog('Both peers in voice channel - starting remote audio playback');
           remoteAudioRef.current.play().catch(err => {
             console.log('Autoplay prevented:', err);
           });
+        } else {
+          addLog(`Remote peer joined but we're not in voice channel yet (we're in voice: ${inVoiceChannel})`);
         }
       } else if (message.type === 'voice-leave') {
         setRemoteInVoiceChannel(false);
@@ -164,12 +166,15 @@ export default function WebRTCManualSignal() {
       // Store the remote stream but only play it if we're also in voice channel
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = e.streams[0];
+        addLog(`Remote audio stream set. We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
         // Only play if we're also in the voice channel
         if (inVoiceChannel) {
+          addLog('Playing remote audio - both peers in voice channel');
           remoteAudioRef.current.play().catch(err => {
             console.log('Autoplay prevented:', err);
           });
         } else {
+          addLog('Pausing remote audio - we are not in voice channel');
           // Pause the audio if we're not in voice channel
           remoteAudioRef.current.pause();
         }
@@ -293,6 +298,7 @@ export default function WebRTCManualSignal() {
       // Add audio tracks to peer connection
       stream.getTracks().forEach(track => {
         pcRef.current.addTrack(track, stream);
+        addLog(`Added ${track.kind} track to peer connection`);
       });
 
       setInVoiceChannel(true);
@@ -301,9 +307,12 @@ export default function WebRTCManualSignal() {
       
       // Start playing remote audio if remote peer is already in voice channel
       if (remoteInVoiceChannel && remoteAudioRef.current) {
+        addLog('Remote peer already in voice channel - starting remote audio playback');
         remoteAudioRef.current.play().catch(err => {
           console.log('Autoplay prevented:', err);
         });
+      } else {
+        addLog('Remote peer not in voice channel yet - waiting for them to join');
       }
     } catch (err) {
       alert('Error joining voice channel: ' + err.message);
@@ -460,13 +469,16 @@ export default function WebRTCManualSignal() {
 
   // Handle remote audio playback when voice channel state changes
   useEffect(() => {
+    addLog(`Voice channel state changed - We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
     if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current) {
       // Both peers are in voice channel, start playing remote audio
+      addLog('Both peers in voice channel - starting remote audio playback (useEffect)');
       remoteAudioRef.current.play().catch(err => {
         console.log('Autoplay prevented:', err);
       });
     } else if (!inVoiceChannel && remoteAudioRef.current) {
       // We're not in voice channel, pause remote audio
+      addLog('We left voice channel - pausing remote audio');
       remoteAudioRef.current.pause();
     }
   }, [inVoiceChannel, remoteInVoiceChannel]);
