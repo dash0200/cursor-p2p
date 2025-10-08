@@ -8,7 +8,7 @@
   gap: 0;
 }
 
-/* Left Side (75%) */
+/* Left Side (75% when connected, 100% when not connected) */
 .webrtc-left {
   flex: 3;
   padding: 24px;
@@ -24,6 +24,13 @@
   margin-right: -20px;
   position: relative;
   z-index: 10;
+}
+
+/* When not connected, left side takes full width */
+.webrtc-container:not(.connected) .webrtc-left {
+  flex: 1;
+  border-radius: 20px;
+  margin-right: 0;
 }
 
 /* Video Player Section */
@@ -218,6 +225,44 @@
   color: #a0a0a0;
   font-family: 'Monaco', 'Menlo', monospace;
   min-width: 80px;
+}
+
+.volume-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume-slider {
+  width: 60px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #4ade80;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.3);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #4ade80;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.3);
 }
 
 /* Right Side (25%) */

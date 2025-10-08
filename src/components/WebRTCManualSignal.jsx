@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Copy, Check, Phone, PhoneOff, Volume2, Play, Pause, Maximize, Upload } from 'lucide-react';
+import { Mic, MicOff, Copy, Check, Phone, PhoneOff, Volume2, VolumeX, Play, Pause, Maximize, Upload } from 'lucide-react';
 import './WebRTCManualSignal.css';
 
 export default function WebRTCManualSignal() {
@@ -16,6 +16,10 @@ export default function WebRTCManualSignal() {
   const [activeTab, setActiveTab] = useState('voice');
   const [videoFile, setVideoFile] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -313,6 +317,7 @@ export default function WebRTCManualSignal() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+
   const handleVideoFileSelect = (event) => {
     const file = event.target.files[0];
     if (file && file.type.startsWith('video/')) {
@@ -347,6 +352,44 @@ export default function WebRTCManualSignal() {
     }
   };
 
+  const handleSeek = (e) => {
+    if (videoRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const width = rect.width;
+      const newTime = (clickX / width) * duration;
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  const handleVolumeChange = (e) => {
+    if (videoRef.current) {
+      const newVolume = parseFloat(e.target.value);
+      setVolume(newVolume);
+      videoRef.current.volume = newVolume;
+      setIsVideoMuted(newVolume === 0);
+    }
+  };
+
+  const toggleVideoMute = () => {
+    if (videoRef.current) {
+      if (isVideoMuted) {
+        videoRef.current.volume = volume;
+        setIsVideoMuted(false);
+      } else {
+        videoRef.current.volume = 0;
+        setIsVideoMuted(true);
+      }
+    }
+  };
+
+  const formatTime = (time) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
   // Add event listeners for video state changes
   useEffect(() => {
     const video = videoRef.current;
@@ -354,24 +397,149 @@ export default function WebRTCManualSignal() {
       const handlePlay = () => setIsPlaying(true);
       const handlePause = () => setIsPlaying(false);
       const handleEnded = () => setIsPlaying(false);
+      const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+      const handleLoadedMetadata = () => setDuration(video.duration);
+      const handleVolumeChange = () => {
+        setVolume(video.volume);
+        setIsVideoMuted(video.muted);
+      };
 
       video.addEventListener('play', handlePlay);
       video.addEventListener('pause', handlePause);
       video.addEventListener('ended', handleEnded);
+      video.addEventListener('timeupdate', handleTimeUpdate);
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      video.addEventListener('volumechange', handleVolumeChange);
 
       return () => {
         video.removeEventListener('play', handlePlay);
         video.removeEventListener('pause', handlePause);
         video.removeEventListener('ended', handleEnded);
+        video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('volumechange', handleVolumeChange);
       };
     }
   }, [videoFile]);
 
   return (
-    <div className="webrtc-container">
+    <div className={`webrtc-container ${connectionState === 'connected' ? 'connected' : ''}`}>
       {/* Left Side (75%) */}
       <div className="webrtc-left">
-        <div className="video-player-container">
+        {connectionState !== 'connected' && (
+          <div className="webrtc-header">
+            <h1 className="webrtc-title">
+              WebRTC Voice Channel
+            </h1>
+            <p className="webrtc-subtitle">
+              Discord-style voice channel - join and start talking automatically
+            </p>
+            
+            <div className="status-indicators">
+              <div className="status-indicator">
+                <div className={`status-dot ${connectionState}`} />
+                <span className="status-text">
+                  {connectionState}
+                </span>
+              </div>
+              {dataChannelRef.current && dataChannelRef.current.readyState === 'open' && (
+                <div className="status-indicator">
+                  <div className="status-dot data-channel" />
+                  <span className="status-text data-channel">Data Channel Open</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {connectionState !== 'connected' && (
+          <div className="connection-grid">
+            <div className="webrtc-card">
+              <h2 className="card-title">
+                Step 1: Create Connection
+              </h2>
+              
+              <button
+                onClick={createDataChannelOffer}
+                className="neumorphic-btn primary"
+              >
+                Create Offer
+              </button>
+
+              {localOffer && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="copy-section">
+                    <label className="webrtc-label">
+                      Your Offer:
+                    </label>
+                    <button
+                      onClick={() => copyToClipboard(localOffer)}
+                      className="copy-btn"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={localOffer}
+                    readOnly
+                    className="webrtc-textarea"
+                    onClick={(e) => e.target.select()}
+                  />
+                </div>
+              )}
+
+              {localAnswer && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="copy-section">
+                    <label className="webrtc-label">
+                      Your Answer:
+                    </label>
+                    <button
+                      onClick={() => copyToClipboard(localAnswer)}
+                      className="copy-btn"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={localAnswer}
+                    readOnly
+                    className="webrtc-textarea"
+                    onClick={(e) => e.target.select()}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="webrtc-card">
+              <h2 className="card-title">
+                Step 2: Exchange Descriptions
+              </h2>
+              
+              <label className="webrtc-label">
+                Paste Remote Description:
+              </label>
+              <textarea
+                value={remoteDescription}
+                onChange={(e) => setRemoteDescription(e.target.value)}
+                placeholder="Paste the offer or answer from the other peer here..."
+                className="webrtc-textarea"
+              />
+              
+              <button
+                onClick={handleRemoteDescription}
+                className="neumorphic-btn success"
+              >
+                Process Remote Description
+              </button>
+            </div>
+          </div>
+        )}
+
+        {connectionState === 'connected' && (
+          <div className="video-player-container">
           <div className="video-player-wrapper">
             <video
               ref={videoRef}
@@ -416,18 +584,38 @@ export default function WebRTCManualSignal() {
                     {isPlaying ? <Pause size={16} /> : <Play size={16} />}
                   </button>
                   <div className="video-progress">
-                    <div className="progress-bar">
-                      <div className="progress-fill"></div>
+                    <div 
+                      className="progress-bar"
+                      onClick={handleSeek}
+                    >
+                      <div 
+                        className="progress-fill"
+                        style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+                      ></div>
                     </div>
                   </div>
                   <div className="video-time">
-                    <span>00:00</span>
+                    <span>{formatTime(currentTime)}</span>
                     <span>/</span>
-                    <span>00:00</span>
+                    <span>{formatTime(duration)}</span>
                   </div>
-                  <button className="video-control-btn">
-                    <Volume2 size={16} />
-                  </button>
+                  <div className="volume-controls">
+                    <button 
+                      className="video-control-btn"
+                      onClick={toggleVideoMute}
+                    >
+                      {isVideoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={isVideoMuted ? 0 : volume}
+                      onChange={handleVolumeChange}
+                      className="volume-slider"
+                    />
+                  </div>
                   <button className="video-control-btn">
                     <Maximize size={16} />
                   </button>
@@ -443,13 +631,15 @@ export default function WebRTCManualSignal() {
             )}
           </div>
         </div>
+        )}
       </div>
 
-      {/* Neumorphic Gutter */}
-      <div className="webrtc-gutter"></div>
+      {/* Neumorphic Gutter - Only show when connected */}
+      {connectionState === 'connected' && <div className="webrtc-gutter"></div>}
 
-      {/* Right Side (25%) */}
-      <div className="webrtc-right">
+      {/* Right Side (25%) - Only show when connected */}
+      {connectionState === 'connected' && (
+        <div className="webrtc-right">
         <div className="tabs-header">
           <button
             className={`tab-button ${activeTab === 'voice' ? 'active' : ''}`}
@@ -552,7 +742,8 @@ export default function WebRTCManualSignal() {
               </div>
             
             </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
