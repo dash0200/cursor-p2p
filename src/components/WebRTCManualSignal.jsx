@@ -96,15 +96,7 @@ export default function WebRTCManualSignal() {
       } else if (message.type === 'voice-join') {
         setRemoteInVoiceChannel(true);
         addLog('Remote peer joined voice channel');
-        // If we're also in voice, start playing remote audio
-        if (inVoiceChannel && remoteAudioRef.current) {
-          addLog('Both peers in voice channel - starting remote audio playback');
-          remoteAudioRef.current.play().catch(err => {
-            console.log('Autoplay prevented:', err);
-          });
-        } else {
-          addLog(`Remote peer joined but we're not in voice channel yet (we're in voice: ${inVoiceChannel})`);
-        }
+        // Let the useEffect handle audio playback based on state changes
       } else if (message.type === 'voice-leave') {
         setRemoteInVoiceChannel(false);
         // Stop remote audio when remote peer leaves
@@ -163,21 +155,13 @@ export default function WebRTCManualSignal() {
 
     pc.ontrack = (e) => {
       addLog('Received remote audio track');
-      // Store the remote stream but only play it if we're also in voice channel
+      // Store the remote stream but don't play it yet
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = e.streams[0];
         addLog(`Remote audio stream set. We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
-        // Only play if we're also in the voice channel
-        if (inVoiceChannel) {
-          addLog('Playing remote audio - both peers in voice channel');
-          remoteAudioRef.current.play().catch(err => {
-            console.log('Autoplay prevented:', err);
-          });
-        } else {
-          addLog('Pausing remote audio - we are not in voice channel');
-          // Pause the audio if we're not in voice channel
-          remoteAudioRef.current.pause();
-        }
+        // Always pause initially - let the useEffect handle playback
+        remoteAudioRef.current.pause();
+        addLog('Remote audio paused - waiting for both peers to be in voice channel');
       }
     };
 
@@ -305,14 +289,12 @@ export default function WebRTCManualSignal() {
       sendMessage({ type: 'voice-join' });
       addLog('Joined voice channel - audio streaming');
       
-      // Start playing remote audio if remote peer is already in voice channel
-      if (remoteInVoiceChannel && remoteAudioRef.current) {
-        addLog('Remote peer already in voice channel - starting remote audio playback');
-        remoteAudioRef.current.play().catch(err => {
-          console.log('Autoplay prevented:', err);
-        });
-      } else {
-        addLog('Remote peer not in voice channel yet - waiting for them to join');
+      // Force a renegotiation to ensure audio tracks are properly transmitted
+      if (pcRef.current && dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
+        addLog('Triggering renegotiation for audio tracks');
+        const offer = await pcRef.current.createOffer();
+        await pcRef.current.setLocalDescription(offer);
+        sendMessage({ type: 'offer', sdp: pcRef.current.localDescription });
       }
     } catch (err) {
       alert('Error joining voice channel: ' + err.message);
@@ -435,6 +417,28 @@ export default function WebRTCManualSignal() {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const forceStartRemoteAudio = () => {
+    if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current && remoteAudioRef.current.srcObject) {
+      addLog('Force starting remote audio playback');
+      remoteAudioRef.current.play().catch(err => {
+        console.log('Force play failed:', err);
+        addLog('Force play failed - user interaction may be required');
+        // Try again after a short delay
+        setTimeout(() => {
+          if (remoteAudioRef.current && inVoiceChannel && remoteInVoiceChannel) {
+            addLog('Retrying remote audio playback after delay');
+            remoteAudioRef.current.play().catch(err2 => {
+              console.log('Retry also failed:', err2);
+              addLog('Retry also failed - may need user interaction');
+            });
+          }
+        }, 500);
+      });
+    } else {
+      addLog(`Cannot force start audio - inVoice: ${inVoiceChannel}, remoteInVoice: ${remoteInVoiceChannel}, hasStream: ${!!remoteAudioRef.current?.srcObject}`);
+    }
+  };
+
   // Add event listeners for video state changes
   useEffect(() => {
     const video = videoRef.current;
@@ -470,16 +474,94 @@ export default function WebRTCManualSignal() {
   // Handle remote audio playback when voice channel state changes
   useEffect(() => {
     addLog(`Voice channel state changed - We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
-    if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current) {
+    
+    if (!remoteAudioRef.current) {
+      addLog('No remote audio element available');
+      return;
+    }
+
+    if (inVoiceChannel && remoteInVoiceChannel) {
       // Both peers are in voice channel, start playing remote audio
       addLog('Both peers in voice channel - starting remote audio playback (useEffect)');
-      remoteAudioRef.current.play().catch(err => {
-        console.log('Autoplay prevented:', err);
-      });
-    } else if (!inVoiceChannel && remoteAudioRef.current) {
+      if (remoteAudioRef.current.srcObject) {
+        // Use the same logic as the manual button
+        forceStartRemoteAudio();
+      } else {
+        addLog('No remote audio stream available yet');
+      }
+    } else if (!inVoiceChannel) {
       // We're not in voice channel, pause remote audio
       addLog('We left voice channel - pausing remote audio');
       remoteAudioRef.current.pause();
+    } else if (!remoteInVoiceChannel) {
+      // Remote peer is not in voice channel, pause remote audio
+      addLog('Remote peer left voice channel - pausing remote audio');
+      remoteAudioRef.current.pause();
+    }
+  }, [inVoiceChannel, remoteInVoiceChannel]);
+
+  // Add audio event listeners to handle when audio becomes ready
+  useEffect(() => {
+    const audio = remoteAudioRef.current;
+    if (!audio) return;
+
+    const handleCanPlay = () => {
+      addLog('Remote audio can play - checking if both peers are in voice channel');
+      if (inVoiceChannel && remoteInVoiceChannel) {
+        addLog('Both peers in voice channel - starting audio from canplay event');
+        forceStartRemoteAudio();
+      }
+    };
+    
+    const handleLoadedMetadata = () => {
+      addLog('Remote audio metadata loaded - checking if both peers are in voice channel');
+      if (inVoiceChannel && remoteInVoiceChannel) {
+        addLog('Both peers in voice channel - starting audio from loadedmetadata event');
+        forceStartRemoteAudio();
+      }
+    };
+
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+    return () => {
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [inVoiceChannel, remoteInVoiceChannel]); // Re-add listeners when voice channel state changes
+
+  // Aggressive retry mechanism for audio playback
+  useEffect(() => {
+    if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current && remoteAudioRef.current.srcObject) {
+      addLog('Setting up aggressive audio retry mechanism');
+      
+      const retryAudio = () => {
+        if (remoteAudioRef.current && inVoiceChannel && remoteInVoiceChannel) {
+          addLog('Aggressive retry: attempting to start remote audio');
+          remoteAudioRef.current.play().catch(err => {
+            console.log('Aggressive retry failed:', err);
+            addLog('Aggressive retry failed - will try again');
+          });
+        }
+      };
+
+      // Try immediately
+      retryAudio();
+      
+      // Try after 1 second
+      const timeout1 = setTimeout(retryAudio, 1000);
+      
+      // Try after 2 seconds
+      const timeout2 = setTimeout(retryAudio, 2000);
+      
+      // Try after 3 seconds
+      const timeout3 = setTimeout(retryAudio, 3000);
+
+      return () => {
+        clearTimeout(timeout1);
+        clearTimeout(timeout2);
+        clearTimeout(timeout3);
+      };
     }
   }, [inVoiceChannel, remoteInVoiceChannel]);
 
