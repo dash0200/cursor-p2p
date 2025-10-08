@@ -292,17 +292,13 @@ function ChatSidebar({
                 className="voice-btn test-audio-btn"
                 onClick={async () => {
                   try {
-                    console.log('🎤 Testing microphone access...')
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-                    console.log('🎤 Got stream:', stream)
-                    console.log('🎤 Stream tracks:', stream.getTracks())
                     
                     const audio = new Audio()
                     audio.srcObject = stream
                     audio.volume = 0.5
                     audio.muted = false
                     await audio.play()
-                    console.log('🎤 Test audio playing')
                     addMessage('system', 'Microphone test successful - you should hear yourself')
                   } catch (error) {
                     console.error('🎤 Test audio failed:', error)
@@ -316,12 +312,6 @@ function ChatSidebar({
               <button 
                 className="voice-btn test-audio-btn"
                 onClick={() => {
-                  console.log('🔍 Browser Info:')
-                  console.log('- getUserMedia supported:', !!navigator.mediaDevices?.getUserMedia)
-                  console.log('- WebRTC supported:', !!window.RTCPeerConnection)
-                  console.log('- HTTPS:', location.protocol === 'https:')
-                  console.log('- Localhost:', location.hostname === 'localhost')
-                  console.log('- Audio context:', !!window.AudioContext || !!window.webkitAudioContext)
                   
                   addMessage('system', 'Check console for browser compatibility info')
                 }}

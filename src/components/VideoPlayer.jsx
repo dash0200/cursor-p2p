@@ -90,7 +90,6 @@ function VideoPlayer({
   }
 
   const handleMouseLeave = () => {
-    console.log('🎬 Mouse left video container - hiding controls')
     setShowControls(false)
   }
 

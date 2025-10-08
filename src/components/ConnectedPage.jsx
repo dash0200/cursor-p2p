@@ -63,13 +63,10 @@ function ConnectedPage({
   }
 
   const handleSeek = (time) => {
-    console.log('🎬 ConnectedPage handleSeek called with time:', time)
     if (videoRef.current) {
       videoRef.current.currentTime = time
       setCurrentTime(time)
-      console.log('🎬 Video currentTime set to:', time)
     } else {
-      console.log('🎬 ERROR: videoRef.current not available')
     }
   }
 
@@ -181,15 +178,13 @@ function ConnectedPage({
         volume={1.0}
         style={{ display: 'none' }} 
         onLoadedMetadata={() => {
-          console.log('🎤 Remote audio metadata loaded')
           if (remoteAudioRef.current) {
-            remoteAudioRef.current.play().catch(e => console.log('Auto-play failed:', e))
+            remoteAudioRef.current.play().catch(e => {})
           }
         }}
         onCanPlay={() => {
-          console.log('🎤 Remote audio can play')
           if (remoteAudioRef.current) {
-            remoteAudioRef.current.play().catch(e => console.log('Can-play auto-play failed:', e))
+            remoteAudioRef.current.play().catch(e => {})
           }
         }}
       />

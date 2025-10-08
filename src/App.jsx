@@ -89,7 +89,6 @@ function App() {
   }
 
   const createPeerConnection = () => {
-    console.log('🔗 Creating peer connection with audio support')
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -109,7 +108,6 @@ function App() {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('🔗 ICE candidate generated:', event.candidate)
         iceCandidateBuffer.current.push(event.candidate)
         setIceCandidates(prev => [...prev, event.candidate])
         
@@ -119,17 +117,14 @@ function App() {
             type: 'ice-candidate',
             candidate: event.candidate
           }
-          console.log('🔗 Sending ICE candidate via data channel:', iceData)
           dataChannel.send(JSON.stringify(iceData))
         }
       } else {
-        console.log('🔗 ICE gathering complete')
         isGatheringComplete.current = true
       }
     }
 
     pc.onicegatheringstatechange = () => {
-      console.log('ICE gathering state:', pc.iceGatheringState)
       if (pc.iceGatheringState === 'complete') {
         isGatheringComplete.current = true
         addMessage('system', 'ICE gathering complete')
@@ -137,12 +132,10 @@ function App() {
     }
 
     pc.onsignalingstatechange = () => {
-      console.log('Signaling state:', pc.signalingState)
       setSignalingState(pc.signalingState)
     }
 
     pc.onconnectionstatechange = () => {
-      console.log('🔗 Connection state:', pc.connectionState)
       if (pc.connectionState === 'connected') {
         setConnectionStatus('connected')
         addMessage('system', 'Connection established!')
@@ -156,7 +149,6 @@ function App() {
     }
 
     pc.oniceconnectionstatechange = () => {
-      console.log('ICE connection state:', pc.iceConnectionState)
       if (pc.iceConnectionState === 'connected') {
         setConnectionStatus('connected')
         addMessage('system', 'ICE connection established!')
@@ -169,25 +161,16 @@ function App() {
     }
 
     pc.ondatachannel = (event) => {
-      console.log('📡 RECEIVING DATA CHANNEL')
       const channel = event.channel
       setDataChannel(channel)
       setupDataChannel(channel)
     }
 
     pc.ontrack = (event) => {
-      console.log('🎤 Received remote audio track:', event)
-      console.log('🎤 Streams:', event.streams)
-      console.log('🎤 Tracks:', event.track)
-      console.log('🎤 Track kind:', event.track?.kind)
-      console.log('🎤 Track enabled:', event.track?.enabled)
-      console.log('🎤 Track readyState:', event.track?.readyState)
       
       if (event.track && event.track.kind === 'audio') {
-        console.log('🎤 Audio track received, setting up remote audio')
         
         if (remoteAudioRef.current && event.streams && event.streams[0]) {
-          console.log('🎤 Setting remote audio source')
           remoteAudioRef.current.srcObject = event.streams[0]
           remoteAudioRef.current.volume = 1.0
           remoteAudioRef.current.muted = false
@@ -195,19 +178,15 @@ function App() {
           // Force play the audio
           remoteAudioRef.current.play()
             .then(() => {
-              console.log('🎤 Remote audio playing successfully')
               addMessage('system', 'Remote audio connected')
             })
             .catch(e => {
-              console.log('🎤 Audio play failed:', e)
               addMessage('system', 'Remote audio play failed: ' + e.message)
             })
         } else {
-          console.log('🎤 No remote audio element or stream available')
           addMessage('system', 'Remote audio element not ready')
         }
       } else {
-        console.log('🎤 Non-audio track received or no track')
       }
     }
 
@@ -216,7 +195,6 @@ function App() {
         try {
           isNegotiatingRef.current = true
           setIsNegotiating(true)
-          console.log('🎤 Negotiation needed - creating offer')
           const offer = await pc.createOffer()
           await pc.setLocalDescription(offer)
           sendVoiceMessage({ type: 'voice-offer', sdp: pc.localDescription })
@@ -242,25 +220,19 @@ function App() {
       channel.bufferedAmountLowThreshold = 512 * 1024 // 512KB
     } catch (_) {}
     channel.onopen = () => {
-      console.log('📡 DATA CHANNEL OPENED')
       setConnectionStatus('connected')
       addMessage('system', 'Data channel opened - ready to chat!')
     }
 
     channel.onmessage = async (event) => {
-      console.log('📨 DATA CHANNEL MESSAGE RECEIVED')
-      console.log('📨 MSG RECEIVED - Event data type:', typeof event.data)
-      console.log('📨 MSG RECEIVED - Event data:', event.data)
       
       // Binary chunks (ArrayBuffer) for file data
       if (event.data instanceof ArrayBuffer) {
-        console.log('📨 Processing binary data (ArrayBuffer)')
         handleIncomingBinaryChunk(event.data)
         return
       }
       // Some browsers deliver as Blob
       if (event.data instanceof Blob) {
-        console.log('📨 Processing binary data (Blob)')
         const buf = await event.data.arrayBuffer()
         handleIncomingBinaryChunk(buf)
         return
@@ -270,11 +242,7 @@ function App() {
        
         try {
           const data = JSON.parse(event.data)
-          console.log('📨 RAW MESSAGE RECEIVED:', event.data)
-          console.log('📨 PARSED MESSAGE:', data)
           if (data.type === 'message') {
-            console.log('📨 Processing chat message')
-            console.log('📨 MSG RECEIVED:', data.message)
             addMessage('remote', data.message)
           } else if (data.type === 'file-offer') {
             // Offer to send a file; receiver chooses save location and replies with accept and start offset
@@ -320,42 +288,32 @@ function App() {
             setFileTransfers(prev => prev.map(t => t.id === id ? { ...t, status: 'canceled' } : t))
             addMessage('system', `Transfer canceled by peer${reason ? `: ${reason}` : ''}`)
           } else if (data.type === 'ice-candidate') {
-            console.log('🔗 Received ICE candidate from remote peer:', data.candidate)
             if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
               try {
                 await peerConnection.addIceCandidate(data.candidate)
-                console.log('🔗 ICE candidate added successfully')
               } catch (error) {
                 console.error('🔗 Error adding ICE candidate:', error)
               }
             } else {
-              console.log('🔗 Queuing ICE candidate - no remote description yet')
               iceCandidateBuffer.current.push(data.candidate)
               pendingIceCandidatesRef.current.push(data.candidate)
             }
           } else if (data.type === 'voice-join') {
-            console.log('🎤 Remote peer joined voice channel')
             setRemoteInVoiceChannel(true)
             addMessage('system', 'Remote peer joined voice channel')
           } else if (data.type === 'voice-leave') {
-            console.log('🎤 Remote peer left voice channel')
             setRemoteInVoiceChannel(false)
             addMessage('system', 'Remote peer left voice channel')
           } else if (data.type === 'voice-offer') {
-            console.log('🎤 Received voice renegotiation offer')
             await handleVoiceRenegotiation(data.sdp)
           } else if (data.type === 'voice-answer') {
-            console.log('🎤 Received voice renegotiation answer')
             await handleVoiceAnswer(data.sdp)
           } else if (data.type === 'voice-mute-status') {
-            console.log('🎤 Received mute status:', data.muted)
             // Note: We don't track remote mute status in this implementation
             // but we could add a state variable for it if needed
             addMessage('system', `Remote peer ${data.muted ? 'muted' : 'unmuted'} their microphone`)
           }
         } catch (e) {
-          console.log('📨 JSON PARSE ERROR:', e)
-          console.log('📨 Raw data that failed to parse:', event.data)
           // plain text fallback
           addMessage('remote', event.data)
         }
@@ -388,10 +346,8 @@ function App() {
         type: 'message',
         message: 'TEST MESSAGE FROM DATA CHANNEL'
       }
-      console.log('🧪 SENDING TEST MESSAGE:', testMessage)
       dataChannel.send(JSON.stringify(testMessage))
     } else {
-      console.log('🧪 CANNOT SEND TEST - DataChannel state:', dataChannel?.readyState)
     }
   }
 
@@ -426,7 +382,6 @@ function App() {
     for (const candidate of candidates) {
       try {
         await pc.addIceCandidate(candidate)
-        console.log('Added ICE candidate:', candidate)
       } catch (error) {
         console.error('Failed to add ICE candidate:', error)
       }
@@ -439,7 +394,6 @@ function App() {
       const dataChannel = pc.createDataChannel('chat', {
         ordered: true // reliable by default; removes random stalls from dropped chunks
       })
-      console.log('📡 CREATING DATA CHANNEL')
       setDataChannel(dataChannel)
       setupDataChannel(dataChannel)
 
@@ -583,12 +537,10 @@ function App() {
         type: 'message',
         message: newMessage.trim()
       }
-      console.log('📤 SENDING CHAT MESSAGE:', messageData)
       dataChannel.send(JSON.stringify(messageData))
       addMessage('local', newMessage.trim())
       setNewMessage('')
     } else {
-      console.log('📤 CANNOT SEND CHAT MESSAGE - DataChannel state:', dataChannel?.readyState)
     }
   }
 
@@ -976,62 +928,38 @@ function App() {
   const sendVoiceMessage = (message) => {
     if (dataChannel && dataChannel.readyState === 'open') {
       dataChannel.send(JSON.stringify(message))
-      console.log('🎤 Sent voice message:', message.type)
     } else {
-      console.log('🎤 Cannot send voice message - data channel not ready:', dataChannel?.readyState)
     }
   }
 
   const checkConnectionStatus = () => {
-    console.log('🔍 Connection Status:')
-    console.log('- Peer connection state:', peerConnection?.connectionState)
-    console.log('- ICE connection state:', peerConnection?.iceConnectionState)
-    console.log('- Data channel state:', dataChannel?.readyState)
-    console.log('- Local stream:', !!localStreamRef.current)
-    console.log('- Remote audio element:', !!remoteAudioRef.current)
-    console.log('- In voice channel:', inVoiceChannel)
-    console.log('- Remote in voice channel:', remoteInVoiceChannel)
     
     if (peerConnection) {
       const senders = peerConnection.getSenders()
-      console.log('- Audio senders:', senders.length)
       senders.forEach((sender, i) => {
-        console.log(`  Sender ${i}:`, sender.track?.kind, sender.track?.enabled)
       })
       
       const receivers = peerConnection.getReceivers()
-      console.log('- Audio receivers:', receivers.length)
       receivers.forEach((receiver, i) => {
-        console.log(`  Receiver ${i}:`, receiver.track?.kind, receiver.track?.enabled)
         if (receiver.track && receiver.track.kind === 'audio') {
-          console.log(`  Audio receiver ${i} stream:`, receiver.track.readyState)
         }
       })
     }
     
     if (remoteAudioRef.current) {
-      console.log('- Remote audio element state:')
-      console.log('  - srcObject:', !!remoteAudioRef.current.srcObject)
-      console.log('  - volume:', remoteAudioRef.current.volume)
-      console.log('  - muted:', remoteAudioRef.current.muted)
-      console.log('  - paused:', remoteAudioRef.current.paused)
     }
   }
 
   const forcePlayRemoteAudio = () => {
     if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
-      console.log('🎤 Force playing remote audio')
       remoteAudioRef.current.play()
         .then(() => {
-          console.log('🎤 Remote audio force play successful')
           addMessage('system', 'Remote audio force play successful')
         })
         .catch(e => {
-          console.log('🎤 Remote audio force play failed:', e)
           addMessage('system', 'Remote audio force play failed: ' + e.message)
         })
     } else {
-      console.log('🎤 No remote audio to play')
       addMessage('system', 'No remote audio stream available')
     }
   }
@@ -1044,14 +972,11 @@ function App() {
         const audioContext = new AudioContext()
         if (audioContext.state === 'suspended') {
           await audioContext.resume()
-          console.log('🎤 Audio context resumed')
         }
-        console.log('🎤 Audio context state:', audioContext.state)
         audioContextRef.current = audioContext
         return audioContext
       }
     } catch (error) {
-      console.log('🎤 Audio context initialization failed:', error)
     }
   }
 
@@ -1067,7 +992,6 @@ function App() {
       
       return analyser
     } catch (error) {
-      console.log('🎤 Audio analyzer creation failed:', error)
       return null
     }
   }
@@ -1139,14 +1063,12 @@ function App() {
     try {
       isNegotiatingRef.current = true
       setIsNegotiating(true)
-      console.log('🎤 Handling voice renegotiation offer')
       await peerConnection.setRemoteDescription(sdp)
       
       // Add any pending ICE candidates
       for (const candidate of pendingIceCandidatesRef.current) {
         try {
           await peerConnection.addIceCandidate(candidate)
-          console.log('🔗 Added pending ICE candidate during renegotiation')
         } catch (error) {
           console.error('🔗 Error adding pending ICE candidate:', error)
         }
@@ -1171,14 +1093,12 @@ function App() {
     if (!peerConnection) return
     
     try {
-      console.log('🎤 Processing voice renegotiation answer')
       await peerConnection.setRemoteDescription(sdp)
       
       // Add any pending ICE candidates
       for (const candidate of pendingIceCandidatesRef.current) {
         try {
           await peerConnection.addIceCandidate(candidate)
-          console.log('🔗 Added pending ICE candidate after answer')
         } catch (error) {
           console.error('🔗 Error adding pending ICE candidate:', error)
         }
@@ -1219,9 +1139,6 @@ function App() {
         } 
       })
       
-      console.log('🎤 Got audio stream:', stream)
-      console.log('🎤 Stream active:', stream.active)
-      console.log('🎤 Stream tracks:', stream.getTracks())
       localStreamRef.current = stream
 
       // Create audio analyzer for visual feedback
@@ -1229,7 +1146,6 @@ function App() {
 
       // Add audio tracks to peer connection
       const audioTracks = stream.getAudioTracks()
-      console.log('🎤 Audio tracks:', audioTracks)
       
       if (audioTracks.length === 0) {
         addMessage('system', 'No audio tracks found in stream')
@@ -1237,9 +1153,6 @@ function App() {
       }
       
       audioTracks.forEach(track => {
-        console.log('🎤 Adding track to peer connection:', track)
-        console.log('🎤 Track enabled:', track.enabled)
-        console.log('🎤 Track readyState:', track.readyState)
         peerConnection.addTrack(track, stream)
       })
 
@@ -1254,7 +1167,7 @@ function App() {
       const testAudio = new Audio()
       testAudio.srcObject = stream
       testAudio.volume = 0.1
-      testAudio.play().catch(e => console.log('Local audio test failed:', e))
+      testAudio.play().catch(e => {})
       
     } catch (error) {
       console.error('🎤 Error joining voice channel:', error)
@@ -1271,21 +1184,17 @@ function App() {
   }
 
   const leaveVoiceChannel = () => {
-    console.log('🎤 Leaving voice channel...')
     
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks()
-      console.log(`🎤 Stopping ${audioTracks.length} audio tracks`)
       
       audioTracks.forEach(track => {
-        console.log(`🎤 Stopping track: ${track.id}`)
         track.stop()
         
         // Remove track from peer connection
         const senders = peerConnection.getSenders()
         const sender = senders.find(s => s.track === track)
         if (sender) {
-          console.log('🎤 Removing track from peer connection')
           peerConnection.removeTrack(sender)
         }
       })
@@ -1306,7 +1215,6 @@ function App() {
     sendVoiceMessage({ type: 'voice-leave' })
     addMessage('system', 'Left voice channel')
     
-    console.log('🎤 Voice channel left successfully')
   }
 
   const toggleMute = () => {
@@ -1316,7 +1224,6 @@ function App() {
       
       audioTracks.forEach(track => {
         track.enabled = !newMutedState
-        console.log(`🎤 Track ${track.id} ${newMutedState ? 'muted' : 'unmuted'}`)
       })
       
       setIsMuted(newMutedState)
@@ -1643,6 +1550,7 @@ function App() {
           {toast.message}
         </div>
       )}
+
       </div>
   )
 }
