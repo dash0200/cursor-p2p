@@ -1273,3 +1273,45 @@
     border-radius: 0 0 20px 20px;
   }
 }
+
+/* Video Sync Indicator */
+.sync-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #22c55e;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.sync-dot {
+  width: 6px;
+  height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: sync-pulse 2s ease-in-out infinite;
+}
+
+@keyframes sync-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+/* Mobile sync indicator adjustments */
+@media (max-width: 768px) {
+  .sync-indicator {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}

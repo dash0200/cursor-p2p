@@ -115,6 +115,40 @@ export default function WebRTCManualSignal() {
           timestamp: message.timestamp,
           sender: 'Remote'
         }]);
+      } else if (message.type === 'video-play') {
+        if (videoRef.current) {
+          videoRef.current.play().then(() => {
+            setIsPlaying(true);
+            addLog('Remote peer started video playback');
+          }).catch((error) => {
+            console.log('Remote play failed:', error);
+            addLog('Remote play failed - may need user interaction');
+          });
+        }
+      } else if (message.type === 'video-pause') {
+        if (videoRef.current) {
+          videoRef.current.pause();
+          setIsPlaying(false);
+          addLog('Remote peer paused video');
+        }
+      } else if (message.type === 'video-seek') {
+        if (videoRef.current && message.time !== undefined) {
+          videoRef.current.currentTime = message.time;
+          setCurrentTime(message.time);
+          addLog(`Remote peer seeked to ${formatTime(message.time)}`);
+        }
+      } else if (message.type === 'video-volume') {
+        if (videoRef.current && message.volume !== undefined) {
+          videoRef.current.volume = message.volume;
+          setVolume(message.volume);
+          setIsVideoMuted(message.volume === 0);
+          addLog(`Remote peer changed volume to ${Math.round(message.volume * 100)}%`);
+        }
+      } else if (message.type === 'video-file') {
+        if (message.fileName && message.fileSize) {
+          addLog(`Remote peer selected video: ${message.fileName} (${Math.round(message.fileSize / 1024 / 1024 * 100) / 100} MB)`);
+          // Note: We can't directly share the file content, but we can notify about file selection
+        }
       }
     } catch (err) {
       addLog(`Error handling message: ${err.message}`);
@@ -366,11 +400,23 @@ export default function WebRTCManualSignal() {
         videoRef.current.onloadeddata = () => {
           videoRef.current.play().then(() => {
             setIsPlaying(true);
+            // Send play message to peer when auto-playing
+            sendMessage({ type: 'video-play' });
+            addLog('Auto-started video playback and notified peer');
           }).catch((error) => {
             console.log('Autoplay prevented:', error);
+            addLog('Autoplay prevented - user interaction may be required');
           });
         };
       }
+      // Notify peer about video file selection
+      sendMessage({ 
+        type: 'video-file', 
+        fileName: file.name, 
+        fileSize: file.size,
+        fileType: file.type
+      });
+      addLog(`Selected video: ${file.name} (${Math.round(file.size / 1024 / 1024 * 100) / 100} MB) and notified peer`);
     }
   };
 
@@ -379,11 +425,18 @@ export default function WebRTCManualSignal() {
       if (isPlaying) {
         videoRef.current.pause();
         setIsPlaying(false);
+        // Send pause message to peer
+        sendMessage({ type: 'video-pause' });
+        addLog('Paused video and notified peer');
       } else {
         videoRef.current.play().then(() => {
           setIsPlaying(true);
+          // Send play message to peer
+          sendMessage({ type: 'video-play' });
+          addLog('Started video playback and notified peer');
         }).catch((error) => {
           console.log('Play failed:', error);
+          addLog('Play failed - may need user interaction');
         });
       }
     }
@@ -397,6 +450,9 @@ export default function WebRTCManualSignal() {
       const newTime = (clickX / width) * duration;
       videoRef.current.currentTime = newTime;
       setCurrentTime(newTime);
+      // Send seek message to peer
+      sendMessage({ type: 'video-seek', time: newTime });
+      addLog(`Seeked to ${formatTime(newTime)} and notified peer`);
     }
   };
 
@@ -406,6 +462,9 @@ export default function WebRTCManualSignal() {
       setVolume(newVolume);
       videoRef.current.volume = newVolume;
       setIsVideoMuted(newVolume === 0);
+      // Send volume change message to peer
+      sendMessage({ type: 'video-volume', volume: newVolume });
+      addLog(`Changed volume to ${Math.round(newVolume * 100)}% and notified peer`);
     }
   };
 
@@ -414,9 +473,15 @@ export default function WebRTCManualSignal() {
       if (isVideoMuted) {
         videoRef.current.volume = volume;
         setIsVideoMuted(false);
+        // Send volume change message to peer
+        sendMessage({ type: 'video-volume', volume: volume });
+        addLog(`Unmuted video (${Math.round(volume * 100)}%) and notified peer`);
       } else {
         videoRef.current.volume = 0;
         setIsVideoMuted(true);
+        // Send volume change message to peer
+        sendMessage({ type: 'video-volume', volume: 0 });
+        addLog('Muted video and notified peer');
       }
     }
   };
@@ -519,19 +584,37 @@ export default function WebRTCManualSignal() {
         break;
       case 'ArrowLeft':
         e.preventDefault();
-        video.currentTime = Math.max(0, video.currentTime - 10);
+        const seekLeftTime = Math.max(0, video.currentTime - 10);
+        video.currentTime = seekLeftTime;
+        setCurrentTime(seekLeftTime);
+        sendMessage({ type: 'video-seek', time: seekLeftTime });
+        addLog(`Seeked left to ${formatTime(seekLeftTime)} and notified peer`);
         break;
       case 'ArrowRight':
         e.preventDefault();
-        video.currentTime = Math.min(video.duration, video.currentTime + 10);
+        const seekRightTime = Math.min(video.duration, video.currentTime + 10);
+        video.currentTime = seekRightTime;
+        setCurrentTime(seekRightTime);
+        sendMessage({ type: 'video-seek', time: seekRightTime });
+        addLog(`Seeked right to ${formatTime(seekRightTime)} and notified peer`);
         break;
       case 'ArrowUp':
         e.preventDefault();
-        video.volume = Math.min(1, video.volume + 0.1);
+        const newVolumeUp = Math.min(1, video.volume + 0.1);
+        video.volume = newVolumeUp;
+        setVolume(newVolumeUp);
+        setIsVideoMuted(newVolumeUp === 0);
+        sendMessage({ type: 'video-volume', volume: newVolumeUp });
+        addLog(`Increased volume to ${Math.round(newVolumeUp * 100)}% and notified peer`);
         break;
       case 'ArrowDown':
         e.preventDefault();
-        video.volume = Math.max(0, video.volume - 0.1);
+        const newVolumeDown = Math.max(0, video.volume - 0.1);
+        video.volume = newVolumeDown;
+        setVolume(newVolumeDown);
+        setIsVideoMuted(newVolumeDown === 0);
+        sendMessage({ type: 'video-volume', volume: newVolumeDown });
+        addLog(`Decreased volume to ${Math.round(newVolumeDown * 100)}% and notified peer`);
         break;
       case 'm':
       case 'M':
@@ -809,8 +892,8 @@ export default function WebRTCManualSignal() {
               className="video-player"
               poster=""
               onClick={togglePlayPause}
+              src={videoFile ? videoRef.current?.src || null : null}
             >
-              <source src="" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
             
@@ -896,6 +979,12 @@ export default function WebRTCManualSignal() {
                   >
                     <Upload size={16} />
                   </button>
+                  {dataChannelRef.current && dataChannelRef.current.readyState === 'open' && (
+                    <div className="sync-indicator" title="Video sync active">
+                      <div className="sync-dot"></div>
+                      <span>Sync</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
