@@ -20,6 +20,7 @@ export default function WebRTCManualSignal() {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -439,6 +440,75 @@ export default function WebRTCManualSignal() {
     }
   };
 
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+
+  const toggleFullscreen = () => {
+    if (!videoRef.current) return;
+    
+    if (!document.fullscreenElement) {
+      videoRef.current.requestFullscreen().catch(err => {
+        console.log('Error attempting to enable fullscreen:', err);
+        addLog('Fullscreen not supported or blocked');
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (!videoRef.current || !videoFile) return;
+    
+    const video = videoRef.current;
+    
+    switch(e.key) {
+      case ' ':
+        e.preventDefault();
+        togglePlayPause();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 10);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration, video.currentTime + 10);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        video.volume = Math.min(1, video.volume + 0.1);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        video.volume = Math.max(0, video.volume - 0.1);
+        break;
+      case 'm':
+      case 'M':
+        e.preventDefault();
+        toggleVideoMute();
+        break;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        toggleFullscreen();
+        break;
+      case 'Escape':
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        }
+        break;
+    }
+  };
+
+  // Add keyboard event listener
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyPress);
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [videoFile, isPlaying, currentTime, volume, isVideoMuted]);
+
   // Add event listeners for video state changes
   useEffect(() => {
     const video = videoRef.current;
@@ -566,8 +636,8 @@ export default function WebRTCManualSignal() {
   }, [inVoiceChannel, remoteInVoiceChannel]);
 
   return (
-    <div className={`webrtc-container ${connectionState === 'connected' ? 'connected' : ''}`}>
-      {/* Left Side (75%) */}
+    <div className={`webrtc-container ${connectionState === 'connected' ? 'connected' : ''} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      {/* Left Side (75% when sidebar visible, 100% when collapsed) */}
       <div className="webrtc-left">
         {connectionState !== 'connected' && (
           <div className="webrtc-header">
@@ -688,6 +758,7 @@ export default function WebRTCManualSignal() {
               ref={videoRef}
               className="video-player"
               poster=""
+              onClick={togglePlayPause}
             >
               <source src="" type="video/mp4" />
               Your browser does not support the video tag.
@@ -706,7 +777,7 @@ export default function WebRTCManualSignal() {
                     Select Video File
                   </button>
                 </div>
-              </div>
+                </div>
             )}
             
             <input
@@ -723,6 +794,7 @@ export default function WebRTCManualSignal() {
                   <button 
                     className="video-control-btn"
                     onClick={togglePlayPause}
+                    title={`${isPlaying ? 'Pause' : 'Play'} (Space)`}
                   >
                     {isPlaying ? <Pause size={16} /> : <Play size={16} />}
                   </button>
@@ -735,7 +807,7 @@ export default function WebRTCManualSignal() {
                         className="progress-fill"
                         style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
                       ></div>
-                    </div>
+              </div>
                   </div>
                   <div className="video-time">
                     <span>{formatTime(currentTime)}</span>
@@ -743,12 +815,13 @@ export default function WebRTCManualSignal() {
                     <span>{formatTime(duration)}</span>
                   </div>
                   <div className="volume-controls">
-                    <button 
-                      className="video-control-btn"
-                      onClick={toggleVideoMute}
-                    >
-                      {isVideoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                    </button>
+                  <button 
+                    className="video-control-btn"
+                    onClick={toggleVideoMute}
+                    title={`${isVideoMuted ? 'Unmute' : 'Mute'} (M)`}
+                  >
+                    {isVideoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                  </button>
                     <input
                       type="range"
                       min="0"
@@ -759,7 +832,11 @@ export default function WebRTCManualSignal() {
                       className="volume-slider"
                     />
                   </div>
-                  <button className="video-control-btn">
+                  <button 
+                    className="video-control-btn"
+                    onClick={toggleFullscreen}
+                    title="Fullscreen (F)"
+                  >
                     <Maximize size={16} />
                   </button>
                   <button 
@@ -775,13 +852,24 @@ export default function WebRTCManualSignal() {
           </div>
         </div>
         )}
-      </div>
+            </div>
 
-      {/* Neumorphic Gutter - Only show when connected */}
-      {connectionState === 'connected' && <div className="webrtc-gutter"></div>}
-
-      {/* Right Side (25%) - Only show when connected */}
+      {/* Sidebar Toggle Button - Only show when connected */}
       {connectionState === 'connected' && (
+        <button 
+          className={`sidebar-toggle ${isSidebarCollapsed ? 'collapsed' : ''}`}
+          onClick={toggleSidebar}
+          title={isSidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+        >
+          {isSidebarCollapsed ? '◀' : '▶'}
+        </button>
+      )}
+
+      {/* Neumorphic Gutter - Only show when connected and not collapsed */}
+      {connectionState === 'connected' && !isSidebarCollapsed && <div className="webrtc-gutter"></div>}
+
+      {/* Right Side (25%) - Only show when connected and not collapsed */}
+      {connectionState === 'connected' && !isSidebarCollapsed && (
         <div className="webrtc-right">
         <div className="tabs-header">
           <button
@@ -796,7 +884,7 @@ export default function WebRTCManualSignal() {
           >
             Logs
           </button>
-        </div>
+                  </div>
           
             {/* Voice Channel Tab */}
             <div className={`tab-panel ${activeTab !== 'voice' ? 'hidden' : ''}`}>
@@ -809,83 +897,83 @@ export default function WebRTCManualSignal() {
                     </div>
                     <p className="voice-avatar-name">You</p>
                     <p className="voice-avatar-status">{inVoiceChannel ? 'Connected' : 'Not in channel'}</p>
-                  </div>
+                </div>
 
                   <div className="audio-visualization">
                     <div className="audio-bars">
-                      {[...Array(5)].map((_, i) => (
-                        <div
-                          key={i}
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
                           className={`audio-bar ${inVoiceChannel && remoteInVoiceChannel ? 'active' : ''}`}
                           style={{ animationDelay: `${i * 0.1}s` }}
-                        />
-                      ))}
-                    </div>
+                      />
+                    ))}
                   </div>
+                </div>
 
                   <div className="voice-avatar">
                     <div className={`voice-avatar-circle ${remoteInVoiceChannel ? 'active' : ''}`}>
                       <Volume2 style={{ color: 'white' }} size={24} />
-                    </div>
+                  </div>
                     <p className="voice-avatar-name">Remote</p>
                     <p className="voice-avatar-status">{remoteInVoiceChannel ? 'Connected' : 'Not in channel'}</p>
-                  </div>
-                </div>
+              </div>
+            </div>
 
                 <div className="voice-controls">
-                  {!inVoiceChannel ? (
-                    <button
-                      onClick={joinVoiceChannel}
+              {!inVoiceChannel ? (
+                <button
+                  onClick={joinVoiceChannel}
                       className="voice-control-btn join"
                     >
                       <Phone size={16} />
                       Join Voice
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        onClick={toggleMute}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={toggleMute}
                         className={`voice-control-btn mute ${isMuted ? 'active' : ''}`}
                       >
                         {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
-                        {isMuted ? 'Unmute' : 'Mute'}
-                      </button>
-                      <button
-                        onClick={leaveVoiceChannel}
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <button
+                    onClick={leaveVoiceChannel}
                         className="voice-control-btn leave"
                       >
                         <PhoneOff size={16} />
                         Leave
-                      </button>
-                    </>
-                  )}
-                </div>
+                  </button>
+                </>
+              )}
+            </div>
 
                 <audio ref={remoteAudioRef} autoPlay className="webrtc-audio" />
-              </div>
+          </div>
             </div>
 
             {/* Log Tab */}
             <div className={`tab-panel ${activeTab !== 'log' ? 'hidden' : ''}`}>
               <div className="log-card">
                 <h2 className="log-title">
-                  Connection Log
-                </h2>
+            Connection Log
+          </h2>
                 <div className="log-container">
-                  {logs.length === 0 ? (
+            {logs.length === 0 ? (
                     <p className="log-empty">No events yet...</p>
-                  ) : (
-                    logs.map((log, i) => (
+            ) : (
+              logs.map((log, i) => (
                       <div key={i} className="log-entry">
-                        {log}
-                      </div>
-                    ))
-                  )}
+                  {log}
                 </div>
-              </div>
-            
-            </div>
+              ))
+            )}
+          </div>
         </div>
+            
+        </div>
+      </div>
       )}
     </div>
   );

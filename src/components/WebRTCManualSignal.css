@@ -8,6 +8,16 @@
   gap: 0;
 }
 
+.webrtc-container.connected {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.webrtc-container.sidebar-collapsed .webrtc-left {
+  flex: 1;
+  margin-right: 0;
+}
+
 /* Left Side (75% when connected, 100% when not connected) */
 .webrtc-left {
   flex: 3;
@@ -15,7 +25,6 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow-y: auto;
   background: #1a1a1a;
   box-shadow: 
     inset 8px 8px 16px rgba(0, 0, 0, 0.3),
@@ -24,6 +33,11 @@
   margin-right: -20px;
   position: relative;
   z-index: 10;
+}
+
+.webrtc-container.connected .webrtc-left {
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* When not connected, left side takes full width */
@@ -43,10 +57,11 @@
   box-shadow: 
     8px 8px 16px rgba(0, 0, 0, 0.3),
     -8px -8px 16px rgba(255, 255, 255, 0.05);
-  padding: 20px;
+  padding: 0;
   position: relative;
-  z-index: 2;
+  z-index: 1;
   min-height: 0;
+  margin-right: 20px;
 }
 
 .video-player-wrapper {
@@ -56,7 +71,7 @@
   box-shadow: 
     inset 4px 4px 8px rgba(0, 0, 0, 0.3),
     inset -4px -4px 8px rgba(255, 255, 255, 0.05);
-  padding: 16px;
+  padding: 0;
   position: relative;
   overflow: hidden;
   min-height: 0;
@@ -65,10 +80,10 @@
 .video-player {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 16px;
   background: #0a0a0a;
   outline: none;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .video-placeholder {
@@ -142,52 +157,52 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-  padding: 20px 16px 16px;
-  border-radius: 0 0 12px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.2));
+  padding: 0 16px 8px;
+  border-radius: 0 0 16px 16px;
   opacity: 0;
   transition: opacity 0.3s ease;
+  min-height: 80px;
 }
+
 
 .video-player-wrapper:hover .video-overlay {
   opacity: 1;
 }
+
 
 .video-controls {
   display: flex;
   align-items: center;
   gap: 12px;
   color: #e0e0e0;
+  background: rgba(0, 0, 0, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
 }
 
 .video-control-btn {
-  background: rgba(26, 26, 26, 0.8);
+  background: rgba(26, 26, 26, 0.3);
   border: none;
   border-radius: 8px;
   padding: 8px;
   color: #e0e0e0;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 
-    2px 2px 4px rgba(0, 0, 0, 0.3),
-    -2px -2px 4px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .video-control-btn:hover {
-  background: rgba(26, 26, 26, 0.9);
-  box-shadow: 
-    1px 1px 2px rgba(0, 0, 0, 0.3),
-    -1px -1px 2px rgba(255, 255, 255, 0.1);
+  background: rgba(26, 26, 26, 0.5);
   transform: translateY(-1px);
 }
 
 .video-control-btn:active {
-  box-shadow: 
-    inset 2px 2px 4px rgba(0, 0, 0, 0.3),
-    inset -2px -2px 4px rgba(255, 255, 255, 0.05);
+  background: rgba(26, 26, 26, 0.6);
   transform: translateY(0);
 }
 
@@ -199,13 +214,22 @@
 
 .progress-bar {
   width: 100%;
-  height: 4px;
+  height: 8px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  border-radius: 4px;
   overflow: hidden;
   box-shadow: 
     inset 1px 1px 2px rgba(0, 0, 0, 0.3),
     inset -1px -1px 2px rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  padding: 4px 0;
+  margin: 4px 0;
+  transition: all 0.2s ease;
+}
+
+.progress-bar:hover {
+  background: rgba(255, 255, 255, 0.2);
+  height: 10px;
 }
 
 .progress-fill {
@@ -279,7 +303,52 @@
   border-radius: 20px 0 0 20px;
   margin-left: -20px;
   position: relative;
-  z-index: 10;
+  z-index: 20;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Sidebar Toggle Button */
+.sidebar-toggle {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(26, 26, 26, 0.8);
+  color: #a0a0a0;
+  font-size: 12px;
+  font-weight: normal;
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 
+    2px 2px 4px rgba(0, 0, 0, 0.2),
+    -2px -2px 4px rgba(255, 255, 255, 0.03);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+
+.sidebar-toggle:hover {
+  opacity: 1;
+  color: #e0e0e0;
+  box-shadow: 
+    2px 2px 4px rgba(0, 0, 0, 0.25),
+    -2px -2px 4px rgba(255, 255, 255, 0.05);
+  transform: translateY(-50%) scale(1.02);
+}
+
+.sidebar-toggle.collapsed {
+  right: 30px;
+}
+
+.sidebar-toggle:not(.collapsed) {
+  right: calc(25% + 20px);
 }
 
 /* Neumorphic Gutter */
@@ -950,11 +1019,12 @@
   }
 
   .video-player-container {
-    padding: 16px;
+    padding: 0;
+    margin-right: 16px;
   }
 
   .video-player-wrapper {
-    padding: 12px;
+    padding: 0;
   }
 
   .video-controls {
@@ -974,6 +1044,21 @@
     padding: 16px;
     border-radius: 16px;
     margin-left: -16px;
+  }
+
+  .sidebar-toggle {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+    right: 20px;
+  }
+
+  .sidebar-toggle.collapsed {
+    right: 24px;
+  }
+
+  .sidebar-toggle:not(.collapsed) {
+    right: calc(25% + 16px);
   }
 
   .webrtc-gutter {
