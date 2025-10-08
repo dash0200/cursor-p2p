@@ -27,6 +27,10 @@ function ConnectedPage({
   toggleMute,
   remoteAudioRef,
   checkConnectionStatus,
+  forcePlayRemoteAudio,
+  initializeAudioContext,
+  localAudioLevel,
+  remoteAudioLevel,
 }) {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -158,6 +162,11 @@ function ConnectedPage({
             toggleMute={toggleMute}
             remoteAudioRef={remoteAudioRef}
             checkConnectionStatus={checkConnectionStatus}
+            forcePlayRemoteAudio={forcePlayRemoteAudio}
+            initializeAudioContext={initializeAudioContext}
+            localAudioLevel={localAudioLevel}
+            remoteAudioLevel={remoteAudioLevel}
+            addMessage={addMessage}
           />
         )}
       </div>
@@ -168,7 +177,21 @@ function ConnectedPage({
         autoPlay 
         playsInline
         controls={false}
+        muted={false}
+        volume={1.0}
         style={{ display: 'none' }} 
+        onLoadedMetadata={() => {
+          console.log('🎤 Remote audio metadata loaded')
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.play().catch(e => console.log('Auto-play failed:', e))
+          }
+        }}
+        onCanPlay={() => {
+          console.log('🎤 Remote audio can play')
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.play().catch(e => console.log('Can-play auto-play failed:', e))
+          }
+        }}
       />
     </div>
   )

@@ -24,6 +24,11 @@ function ChatSidebar({
   toggleMute,
   remoteAudioRef,
   checkConnectionStatus,
+  forcePlayRemoteAudio,
+  initializeAudioContext,
+  localAudioLevel,
+  remoteAudioLevel,
+  addMessage,
 }) {
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -130,40 +135,98 @@ function ChatSidebar({
 
         {activeTab === 'voice' && (
           <div className="voice-content">
-            <div className="voice-status">
-              <div className="voice-participants">
-                <div className="participant">
-                  <div className={`participant-indicator ${inVoiceChannel ? 'active' : ''}`}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                      <line x1="12" y1="19" x2="12" y2="23"></line>
-                      <line x1="8" y1="23" x2="16" y2="23"></line>
-                    </svg>
-                  </div>
-                  <span className="participant-name">You</span>
-                  <span className={`participant-status ${inVoiceChannel ? 'connected' : 'disconnected'}`}>
-                    {inVoiceChannel ? (isMuted ? 'Muted' : 'Speaking') : 'Not in channel'}
-                  </span>
+            {/* Voice Channel Header */}
+            <div className="voice-channel-header">
+              <div className="channel-info">
+                <div className="channel-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
                 </div>
-                
-                <div className="participant">
-                  <div className={`participant-indicator ${remoteInVoiceChannel ? 'active' : ''}`}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                      <line x1="12" y1="19" x2="12" y2="23"></line>
-                      <line x1="8" y1="23" x2="16" y2="23"></line>
-                    </svg>
-                  </div>
-                  <span className="participant-name">Remote Peer</span>
-                  <span className={`participant-status ${remoteInVoiceChannel ? 'connected' : 'disconnected'}`}>
-                    {remoteInVoiceChannel ? 'Speaking' : 'Not in channel'}
-                  </span>
+                <div className="channel-details">
+                  <h3 className="channel-name">General Voice</h3>
+                  <p className="channel-description">
+                    {inVoiceChannel || remoteInVoiceChannel ? 
+                      `${inVoiceChannel && remoteInVoiceChannel ? '2' : '1'} member${inVoiceChannel && remoteInVoiceChannel ? 's' : ''} in voice` : 
+                      'No one is in voice'
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="channel-status">
+                <div className={`status-indicator ${inVoiceChannel || remoteInVoiceChannel ? 'active' : 'inactive'}`}>
+                  <div className="status-dot"></div>
                 </div>
               </div>
             </div>
 
+            {/* Voice Visualization */}
+            <div className="voice-visualization">
+              <div className="visualization-container">
+                <div className="participant-visual">
+                  <div className={`participant-avatar ${inVoiceChannel ? 'connected' : 'disconnected'}`}>
+                    <div className="avatar-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                    </div>
+                    {inVoiceChannel && localAudioLevel > 0.1 && (
+                      <div className="speaking-indicator">
+                        <div className="speaking-ring"></div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="participant-info">
+                    <span className="participant-name">You</span>
+                    <span className={`participant-status ${inVoiceChannel ? 'connected' : 'disconnected'}`}>
+                      {inVoiceChannel ? (isMuted ? 'Muted' : (localAudioLevel > 0.1 ? 'Speaking' : 'Connected')) : 'Not connected'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Audio Visualization Bars */}
+                <div className="audio-visualization">
+                  {[...Array(8)].map((_, i) => (
+                    <div
+                      key={i}
+                      className={`viz-bar ${inVoiceChannel && localAudioLevel > (i + 1) * 0.125 ? 'active' : ''}`}
+                      style={{
+                        height: `${Math.max(8, localAudioLevel * 40 + Math.random() * 10)}px`,
+                        animationDelay: `${i * 0.05}s`
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <div className="participant-visual">
+                  <div className={`participant-avatar ${remoteInVoiceChannel ? 'connected' : 'disconnected'}`}>
+                    <div className="avatar-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                    </div>
+                    {remoteInVoiceChannel && remoteAudioLevel > 0.1 && (
+                      <div className="speaking-indicator">
+                        <div className="speaking-ring"></div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="participant-info">
+                    <span className="participant-name">Remote Peer</span>
+                    <span className={`participant-status ${remoteInVoiceChannel ? 'connected' : 'disconnected'}`}>
+                      {remoteInVoiceChannel ? (remoteAudioLevel > 0.1 ? 'Speaking' : 'Connected') : 'Not connected'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Voice Controls */}
             <div className="voice-controls">
               {!inVoiceChannel ? (
                 <button 
@@ -182,6 +245,7 @@ function ChatSidebar({
                     className={`voice-btn ${isMuted ? 'mute-btn' : 'unmute-btn'}`}
                     onClick={toggleMute}
                     disabled={isNegotiating}
+                    title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
                   >
                     {isMuted ? (
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -202,6 +266,7 @@ function ChatSidebar({
                     className="voice-btn leave-btn"
                     onClick={leaveVoiceChannel}
                     disabled={isNegotiating}
+                    title="Leave voice channel"
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path>
@@ -274,6 +339,27 @@ function ChatSidebar({
                 style={{ marginTop: '0.5rem' }}
               >
                 Check Connection Status
+              </button>
+              
+              <button 
+                className="voice-btn test-audio-btn"
+                onClick={() => {
+                  forcePlayRemoteAudio()
+                }}
+                style={{ marginTop: '0.5rem' }}
+              >
+                Force Play Remote Audio
+              </button>
+              
+              <button 
+                className="voice-btn test-audio-btn"
+                onClick={async () => {
+                  await initializeAudioContext()
+                  addMessage('system', 'Audio context initialized')
+                }}
+                style={{ marginTop: '0.5rem' }}
+              >
+                Initialize Audio Context
               </button>
             </div>
           </div>
