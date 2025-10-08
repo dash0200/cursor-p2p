@@ -39,6 +39,10 @@ export default function WebRTCManualSignal() {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.pause();
+        remoteAudioRef.current.srcObject = null;
+      }
       if (pcRef.current) {
         pcRef.current.close();
       }
@@ -98,6 +102,11 @@ export default function WebRTCManualSignal() {
         }
       } else if (message.type === 'voice-leave') {
         setRemoteInVoiceChannel(false);
+        // Stop remote audio when remote peer leaves
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.pause();
+          remoteAudioRef.current.srcObject = null;
+        }
         addLog('Remote peer left voice channel');
       }
     } catch (err) {
@@ -295,8 +304,15 @@ export default function WebRTCManualSignal() {
       localStreamRef.current = null;
     }
     
+    // Stop remote audio playback
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
+      remoteAudioRef.current.srcObject = null;
+    }
+    
     setInVoiceChannel(false);
     setIsMuted(false);
+    setRemoteInVoiceChannel(false); // Also reset remote state
     sendMessage({ type: 'voice-leave' });
     addLog('Left voice channel');
   };
