@@ -15,17 +15,15 @@ function ChatSidebar({
   formatBytes,
   formatSpeed,
   disconnect,
-  // Voice channel props
-  isInVoiceChannel,
+  inVoiceChannel,
   remoteInVoiceChannel,
   isMuted,
+  isNegotiating,
   joinVoiceChannel,
   leaveVoiceChannel,
   toggleMute,
-  localAudioStream,
-  remoteAudioStream,
-  isPeerConnectionReady,
-  audioElementRef,
+  remoteAudioRef,
+  checkConnectionStatus,
 }) {
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -58,16 +56,16 @@ function ChatSidebar({
             Chat
           </button>
           <button 
+            className={`tab-btn ${activeTab === 'voice' ? 'active' : ''}`}
+            onClick={() => setActiveTab('voice')}
+          >
+            Voice
+          </button>
+          <button 
             className={`tab-btn ${activeTab === 'files' ? 'active' : ''}`}
             onClick={() => setActiveTab('files')}
           >
             Files
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'audio' ? 'active' : ''}`}
-            onClick={() => setActiveTab('audio')}
-          >
-            Audio
           </button>
         </div>
         <div className="header-actions">
@@ -128,6 +126,157 @@ function ChatSidebar({
               </button>
             </div>
           </>
+        )}
+
+        {activeTab === 'voice' && (
+          <div className="voice-content">
+            <div className="voice-status">
+              <div className="voice-participants">
+                <div className="participant">
+                  <div className={`participant-indicator ${inVoiceChannel ? 'active' : ''}`}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                      <line x1="12" y1="19" x2="12" y2="23"></line>
+                      <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                  </div>
+                  <span className="participant-name">You</span>
+                  <span className={`participant-status ${inVoiceChannel ? 'connected' : 'disconnected'}`}>
+                    {inVoiceChannel ? (isMuted ? 'Muted' : 'Speaking') : 'Not in channel'}
+                  </span>
+                </div>
+                
+                <div className="participant">
+                  <div className={`participant-indicator ${remoteInVoiceChannel ? 'active' : ''}`}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                      <line x1="12" y1="19" x2="12" y2="23"></line>
+                      <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                  </div>
+                  <span className="participant-name">Remote Peer</span>
+                  <span className={`participant-status ${remoteInVoiceChannel ? 'connected' : 'disconnected'}`}>
+                    {remoteInVoiceChannel ? 'Speaking' : 'Not in channel'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="voice-controls">
+              {!inVoiceChannel ? (
+                <button 
+                  className="voice-btn join-btn"
+                  onClick={joinVoiceChannel}
+                  disabled={!dataChannel || dataChannel.readyState !== 'open' || isNegotiating}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path>
+                  </svg>
+                  Join Voice Channel
+                </button>
+              ) : (
+                <div className="voice-controls-group">
+                  <button 
+                    className={`voice-btn ${isMuted ? 'mute-btn' : 'unmute-btn'}`}
+                    onClick={toggleMute}
+                    disabled={isNegotiating}
+                  >
+                    {isMuted ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <line x1="23" y1="9" x2="17" y2="15"></line>
+                        <line x1="17" y1="9" x2="23" y2="15"></line>
+                      </svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                      </svg>
+                    )}
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </button>
+                  
+                  <button 
+                    className="voice-btn leave-btn"
+                    onClick={leaveVoiceChannel}
+                    disabled={isNegotiating}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path>
+                      <line x1="23" y1="1" x2="1" y2="23"></line>
+                    </svg>
+                    Leave Channel
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {isNegotiating && (
+              <div className="negotiation-status">
+                <div className="negotiation-spinner"></div>
+                <span>Negotiating voice connection...</span>
+              </div>
+            )}
+
+            {/* Debug section */}
+            <div className="voice-debug">
+              <h4 style={{ color: '#e0e0e0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Debug Tools</h4>
+              <button 
+                className="voice-btn test-audio-btn"
+                onClick={async () => {
+                  try {
+                    console.log('🎤 Testing microphone access...')
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                    console.log('🎤 Got stream:', stream)
+                    console.log('🎤 Stream tracks:', stream.getTracks())
+                    
+                    const audio = new Audio()
+                    audio.srcObject = stream
+                    audio.volume = 0.5
+                    audio.muted = false
+                    await audio.play()
+                    console.log('🎤 Test audio playing')
+                    addMessage('system', 'Microphone test successful - you should hear yourself')
+                  } catch (error) {
+                    console.error('🎤 Test audio failed:', error)
+                    addMessage('system', 'Microphone test failed: ' + error.message)
+                  }
+                }}
+              >
+                Test Microphone
+              </button>
+              
+              <button 
+                className="voice-btn test-audio-btn"
+                onClick={() => {
+                  console.log('🔍 Browser Info:')
+                  console.log('- getUserMedia supported:', !!navigator.mediaDevices?.getUserMedia)
+                  console.log('- WebRTC supported:', !!window.RTCPeerConnection)
+                  console.log('- HTTPS:', location.protocol === 'https:')
+                  console.log('- Localhost:', location.hostname === 'localhost')
+                  console.log('- Audio context:', !!window.AudioContext || !!window.webkitAudioContext)
+                  
+                  addMessage('system', 'Check console for browser compatibility info')
+                }}
+                style={{ marginTop: '0.5rem' }}
+              >
+                Check Browser Support
+              </button>
+              
+              <button 
+                className="voice-btn test-audio-btn"
+                onClick={() => {
+                  checkConnectionStatus()
+                  addMessage('system', 'Check console for connection status')
+                }}
+                style={{ marginTop: '0.5rem' }}
+              >
+                Check Connection Status
+              </button>
+            </div>
+          </div>
         )}
 
         {activeTab === 'files' && (
@@ -212,144 +361,6 @@ function ChatSidebar({
           </div>
         )}
 
-        {activeTab === 'audio' && (
-          <div className="audio-content">
-            <div className="audio-channel-section">
-              <h4>Voice Channel</h4>
-              {!isInVoiceChannel ? (
-                <button 
-                  className="join-audio-btn"
-                  onClick={joinVoiceChannel}
-                  disabled={!isPeerConnectionReady()}
-                  title={!isPeerConnectionReady() ? 'Connect to a peer first' : 'Join voice channel'}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                  </svg>
-                  Join Voice Channel
-                </button>
-              ) : (
-                <div className="audio-channel-active">
-                  <div className="audio-status">
-                    <div className="mic-indicator">
-                      <div className={`mic-icon ${isMuted ? 'muted' : 'active'}`}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                          <line x1="12" y1="19" x2="12" y2="23"></line>
-                          <line x1="8" y1="23" x2="16" y2="23"></line>
-                        </svg>
-                      </div>
-                      <div className="mic-info">
-                        <span className="mic-status">
-                          {isMuted ? 'Muted' : 'Connected'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="audio-controls">
-                      <button 
-                        className={`mute-btn ${isMuted ? 'muted' : ''}`}
-                        onClick={toggleMute}
-                        title={isMuted ? 'Unmute' : 'Mute'}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          {isMuted ? (
-                            <>
-                              <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
-                              <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
-                              <line x1="12" y1="19" x2="12" y2="23"></line>
-                              <line x1="8" y1="23" x2="16" y2="23"></line>
-                              <line x1="1" y1="1" x2="23" y2="23"></line>
-                            </>
-                          ) : (
-                            <>
-                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                              <line x1="12" y1="19" x2="12" y2="23"></line>
-                              <line x1="8" y1="23" x2="16" y2="23"></line>
-                            </>
-                          )}
-                        </svg>
-                      </button>
-                      <button 
-                        className="leave-audio-btn"
-                        onClick={leaveVoiceChannel}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
-                          <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
-                          <line x1="12" y1="19" x2="12" y2="23"></line>
-                          <line x1="8" y1="23" x2="16" y2="23"></line>
-                          <line x1="1" y1="1" x2="23" y2="23"></line>
-                        </svg>
-                        Leave Channel
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {remoteInVoiceChannel && (
-                    <div className="remote-audio-info">
-                      <div className="remote-speaker-indicator">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                        </svg>
-                        <span>Remote peer in voice channel</span>
-                      </div>
-                      <button 
-                        className="test-audio-btn"
-                        onClick={() => {
-                          const audio = document.querySelector('audio[style*="display: none"]')
-                          if (audio) {
-                            console.log('🎵 Testing audio element:', audio)
-                            console.log('🎵 Audio srcObject:', audio.srcObject)
-                            console.log('🎵 Audio muted:', audio.muted)
-                            console.log('🎵 Audio volume:', audio.volume)
-                            console.log('🎵 Audio paused:', audio.paused)
-                            audio.play().then(() => {
-                              console.log('🎵 Audio test play successful')
-                            }).catch(e => {
-                              console.log('🎵 Audio test play failed:', e)
-                            })
-                          }
-                        }}
-                      >
-                        Test Audio
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Hidden audio element for remote audio playback */}
-            <audio 
-              ref={audioElementRef}
-              style={{ display: 'none' }}
-              controls={false}
-              muted={false}
-              autoPlay
-              onLoadedMetadata={() => {
-                console.log('🎵 Audio metadata loaded')
-                console.log('🎵 Audio duration:', audioElementRef.current?.duration)
-              }}
-              onCanPlay={() => {
-                console.log('🎵 Audio can play')
-                audioElementRef.current?.play().catch(e => console.log('🎵 Auto-play failed:', e))
-              }}
-              onPlay={() => console.log('🎵 Audio started playing')}
-              onPause={() => console.log('🎵 Audio paused')}
-              onError={(e) => {
-                console.log('🎵 Audio error:', e)
-                console.log('🎵 Audio error details:', e.target.error)
-              }}
-              onVolumeChange={() => console.log('🎵 Audio volume changed:', audioElementRef.current?.volume)}
-            />
-          </div>
-        )}
 
       </div>
     </div>

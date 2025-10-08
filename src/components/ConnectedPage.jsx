@@ -18,17 +18,15 @@ function ConnectedPage({
   formatSpeed,
   disconnect,
   addMessage,
-  // Voice channel props
-  isInVoiceChannel,
+  inVoiceChannel,
   remoteInVoiceChannel,
   isMuted,
+  isNegotiating,
   joinVoiceChannel,
   leaveVoiceChannel,
   toggleMute,
-  localAudioStream,
-  remoteAudioStream,
-  isPeerConnectionReady,
-  audioElementRef,
+  remoteAudioRef,
+  checkConnectionStatus,
 }) {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -151,20 +149,27 @@ function ConnectedPage({
             formatBytes={formatBytes}
             formatSpeed={formatSpeed}
             disconnect={disconnect}
-            // Voice channel props
-            isInVoiceChannel={isInVoiceChannel}
+            inVoiceChannel={inVoiceChannel}
             remoteInVoiceChannel={remoteInVoiceChannel}
             isMuted={isMuted}
+            isNegotiating={isNegotiating}
             joinVoiceChannel={joinVoiceChannel}
             leaveVoiceChannel={leaveVoiceChannel}
             toggleMute={toggleMute}
-            localAudioStream={localAudioStream}
-            remoteAudioStream={remoteAudioStream}
-            isPeerConnectionReady={isPeerConnectionReady}
-            audioElementRef={audioElementRef}
+            remoteAudioRef={remoteAudioRef}
+            checkConnectionStatus={checkConnectionStatus}
           />
         )}
       </div>
+      
+      {/* Hidden audio element for remote audio */}
+      <audio 
+        ref={remoteAudioRef} 
+        autoPlay 
+        playsInline
+        controls={false}
+        style={{ display: 'none' }} 
+      />
     </div>
   )
 }
