@@ -130,9 +130,15 @@ export default function WebRTCManualSignal() {
           inVoiceChannel={webrtc.inVoiceChannel}
           remoteInVoiceChannel={webrtc.remoteInVoiceChannel}
           isMuted={webrtc.isMuted}
+          inVideoChannel={webrtc.inVideoChannel}
+          remoteInVideoChannel={webrtc.remoteInVideoChannel}
+          isVideoMuted={webrtc.isVideoMuted}
+          localVideoStreamRef={webrtc.localVideoStreamRef}
+          remoteVideoRef={webrtc.remoteVideoRef}
           joinVoiceChannel={webrtc.joinVoiceChannel}
           leaveVoiceChannel={webrtc.leaveVoiceChannel}
           toggleMute={webrtc.toggleMute}
+          toggleVideoMute={webrtc.toggleVideoMute}
           chatMessages={chat.chatMessages}
           chatMessage={chat.chatMessage}
           setChatMessage={chat.setChatMessage}

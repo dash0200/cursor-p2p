@@ -9,11 +9,16 @@ export const useWebRTC = () => {
   const [inVoiceChannel, setInVoiceChannel] = useState(false);
   const [remoteInVoiceChannel, setRemoteInVoiceChannel] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [inVideoChannel, setInVideoChannel] = useState(false);
+  const [remoteInVideoChannel, setRemoteInVideoChannel] = useState(false);
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [logs, setLogs] = useState([]);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
+  const localVideoStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   const dataChannelRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const isNegotiatingRef = useRef(false);
@@ -83,6 +88,29 @@ export const useWebRTC = () => {
           remoteAudioRef.current.srcObject = null;
         }
         addLog('Remote peer left voice channel');
+      } else if (message.type === 'video-join') {
+        setRemoteInVideoChannel(true);
+        addLog('Remote peer joined video channel');
+      } else if (message.type === 'video-leave') {
+        setRemoteInVideoChannel(false);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.pause();
+          remoteVideoRef.current.srcObject = null;
+        }
+        addLog('Remote peer left video channel');
+      } else if (message.type === 'peer-disconnected') {
+        // Handle peer disconnection - turn off camera and mic
+        setRemoteInVoiceChannel(false);
+        setRemoteInVideoChannel(false);
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.pause();
+          remoteAudioRef.current.srcObject = null;
+        }
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.pause();
+          remoteVideoRef.current.srcObject = null;
+        }
+        addLog('Remote peer disconnected - turning off camera and mic');
       } else if (message.type === 'chat' && onChatMessage) {
         onChatMessage(message);
       } else if (['video-play', 'video-pause', 'video-seek', 'video-file'].includes(message.type) && onVideoMessage) {
@@ -103,6 +131,18 @@ export const useWebRTC = () => {
 
     channel.onclose = () => {
       addLog('Data channel closed');
+      // When data channel closes, clear remote streams but don't auto-leave
+      setRemoteInVoiceChannel(false);
+      setRemoteInVideoChannel(false);
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.pause();
+        remoteAudioRef.current.srcObject = null;
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.pause();
+        remoteVideoRef.current.srcObject = null;
+      }
+      addLog('Data channel closed - remote streams cleared');
     };
 
     channel.onmessage = (e) => {
@@ -134,15 +174,41 @@ export const useWebRTC = () => {
     pc.onconnectionstatechange = () => {
       setConnectionState(pc.connectionState);
       addLog(`Connection state: ${pc.connectionState}`);
+      
+      // Handle peer disconnection - only clear remote streams, don't auto-leave
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        setRemoteInVoiceChannel(false);
+        setRemoteInVideoChannel(false);
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.pause();
+          remoteAudioRef.current.srcObject = null;
+        }
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.pause();
+          remoteVideoRef.current.srcObject = null;
+        }
+        addLog('Peer connection lost - remote streams cleared');
+      }
     };
 
     pc.ontrack = (e) => {
-      addLog('Received remote audio track');
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = e.streams[0];
-        addLog(`Remote audio stream set. We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
-        remoteAudioRef.current.pause();
-        addLog('Remote audio paused - waiting for both peers to be in voice channel');
+      const stream = e.streams[0];
+      const track = e.track;
+      
+      if (track.kind === 'audio') {
+        addLog('Received remote audio track');
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = stream;
+          addLog(`Remote audio stream set. We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
+          remoteAudioRef.current.pause();
+          addLog('Remote audio paused - waiting for both peers to be in voice channel');
+        }
+      } else if (track.kind === 'video') {
+        addLog('Received remote video track');
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+          addLog(`Remote video stream set. We're in video: ${inVideoChannel}, Remote in video: ${remoteInVideoChannel}`);
+        }
       }
     };
 
@@ -257,20 +323,34 @@ export const useWebRTC = () => {
 
     try {
       addLog('Joining voice channel...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       localStreamRef.current = stream;
+      localVideoStreamRef.current = stream;
 
       stream.getTracks().forEach(track => {
         pcRef.current.addTrack(track, stream);
         addLog(`Added ${track.kind} track to peer connection`);
+        console.log(`Track details:`, {
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          id: track.id
+        });
       });
 
       setInVoiceChannel(true);
+      setInVideoChannel(true);
       sendMessage({ type: 'voice-join' });
-      addLog('Joined voice channel - audio streaming');
+      sendMessage({ type: 'video-join' });
+      addLog('Joined voice and video channel - streaming audio and video');
+
+      // Store the local video stream
+      localVideoStreamRef.current = stream;
+      addLog('Local video stream stored');
+      console.log('Local video stream:', stream);
 
       if (pcRef.current && dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
-        addLog('Triggering renegotiation for audio tracks');
+        addLog('Triggering renegotiation for audio and video tracks');
         const offer = await pcRef.current.createOffer();
         await pcRef.current.setLocalDescription(offer);
         sendMessage({ type: 'offer', sdp: pcRef.current.localDescription });
@@ -292,6 +372,7 @@ export const useWebRTC = () => {
         }
       });
       localStreamRef.current = null;
+      localVideoStreamRef.current = null;
     }
 
     if (remoteAudioRef.current) {
@@ -299,11 +380,24 @@ export const useWebRTC = () => {
       remoteAudioRef.current.srcObject = null;
     }
 
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.pause();
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    if (localVideoStreamRef.current) {
+      localVideoStreamRef.current.srcObject = null;
+    }
+
     setInVoiceChannel(false);
+    setInVideoChannel(false);
     setIsMuted(false);
+    setIsVideoMuted(false);
     setRemoteInVoiceChannel(false);
+    setRemoteInVideoChannel(false);
     sendMessage({ type: 'voice-leave' });
-    addLog('Left voice channel');
+    sendMessage({ type: 'video-leave' });
+    addLog('Left voice and video channel');
   };
 
   const toggleMute = () => {
@@ -313,6 +407,16 @@ export const useWebRTC = () => {
       });
       setIsMuted(!isMuted);
       addLog(isMuted ? 'Unmuted' : 'Muted');
+    }
+  };
+
+  const toggleVideoMute = () => {
+    if (localVideoStreamRef.current) {
+      localVideoStreamRef.current.getVideoTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
+      setIsVideoMuted(!isVideoMuted);
+      addLog(isVideoMuted ? 'Video unmuted' : 'Video muted');
     }
   };
 
@@ -343,9 +447,19 @@ export const useWebRTC = () => {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (localVideoStreamRef.current) {
+        localVideoStreamRef.current.getTracks().forEach(track => track.stop());
+      }
       if (remoteAudioRef.current) {
         remoteAudioRef.current.pause();
         remoteAudioRef.current.srcObject = null;
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.pause();
+        remoteVideoRef.current.srcObject = null;
+      }
+      if (localVideoStreamRef.current) {
+        localVideoStreamRef.current.srcObject = null;
       }
       if (pcRef.current) {
         pcRef.current.close();
@@ -436,6 +550,21 @@ export const useWebRTC = () => {
     }
   }, [inVoiceChannel, remoteInVoiceChannel]);
 
+  // Ensure local video stream is set when video channel is joined
+  useEffect(() => {
+    if (inVideoChannel && localVideoStreamRef.current) {
+      addLog('Local video stream available in useEffect');
+      console.log('Local video stream in useEffect:', localVideoStreamRef.current);
+    }
+  }, [inVideoChannel]);
+
+  // Monitor remote peer status - removed auto turn off to prevent disconnection issues
+  useEffect(() => {
+    if (inVoiceChannel && !remoteInVoiceChannel) {
+      addLog('Remote peer is not in voice channel');
+    }
+  }, [inVoiceChannel, remoteInVoiceChannel]);
+
   return {
     // State
     localOffer,
@@ -447,12 +576,17 @@ export const useWebRTC = () => {
     inVoiceChannel,
     remoteInVoiceChannel,
     isMuted,
+    inVideoChannel,
+    remoteInVideoChannel,
+    isVideoMuted,
     logs,
     
     // Refs
     pcRef,
     localStreamRef,
+    localVideoStreamRef,
     remoteAudioRef,
+    remoteVideoRef,
     dataChannelRef,
     
     // Functions
@@ -461,6 +595,7 @@ export const useWebRTC = () => {
     joinVoiceChannel,
     leaveVoiceChannel,
     toggleMute,
+    toggleVideoMute,
     sendMessage,
     addLog,
     handleDataChannelMessage

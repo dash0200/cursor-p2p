@@ -1,5 +1,5 @@
 import React from 'react';
-import VoiceControls from './VoiceControls';
+import VideoCall from './VideoCall';
 import Chat from './Chat';
 import Logs from './Logs';
 
@@ -9,9 +9,15 @@ const Sidebar = ({
   inVoiceChannel,
   remoteInVoiceChannel,
   isMuted,
+  inVideoChannel,
+  remoteInVideoChannel,
+  isVideoMuted,
+  localVideoStreamRef,
+  remoteVideoRef,
   joinVoiceChannel,
   leaveVoiceChannel,
   toggleMute,
+  toggleVideoMute,
   chatMessages,
   chatMessage,
   setChatMessage,
@@ -46,13 +52,19 @@ const Sidebar = ({
 
       {/* Voice Channel Tab */}
       <div className={`tab-panel ${activeTab !== 'voice' ? 'hidden' : ''}`}>
-        <VoiceControls
+        <VideoCall
           inVoiceChannel={inVoiceChannel}
           remoteInVoiceChannel={remoteInVoiceChannel}
           isMuted={isMuted}
+          inVideoChannel={inVideoChannel}
+          remoteInVideoChannel={remoteInVideoChannel}
+          isVideoMuted={isVideoMuted}
+          localVideoStreamRef={localVideoStreamRef}
+          remoteVideoRef={remoteVideoRef}
           joinVoiceChannel={joinVoiceChannel}
           leaveVoiceChannel={leaveVoiceChannel}
           toggleMute={toggleMute}
+          toggleVideoMute={toggleVideoMute}
         />
       </div>
 
