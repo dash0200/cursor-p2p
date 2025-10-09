@@ -33,6 +33,16 @@ const VideoCall = ({
     if (remoteVideoRef?.current) {
       console.log('Remote video element available:', remoteVideoRef.current);
       console.log('Remote video stream:', remoteVideoRef.current.srcObject);
+      
+      // Test if video element is working by checking its properties
+      console.log('Remote video element properties:', {
+        videoWidth: remoteVideoRef.current.videoWidth,
+        videoHeight: remoteVideoRef.current.videoHeight,
+        readyState: remoteVideoRef.current.readyState,
+        paused: remoteVideoRef.current.paused,
+        muted: remoteVideoRef.current.muted,
+        autoplay: remoteVideoRef.current.autoplay
+      });
     }
   }, [remoteVideoRef?.current, remoteInVideoChannel]);
 
@@ -41,11 +51,23 @@ const VideoCall = ({
     console.log('VideoCall props:', {
       inVoiceChannel,
       inVideoChannel,
+      remoteInVideoChannel,
       localVideoStreamRef: localVideoStreamRef?.current,
       remoteVideoRef: remoteVideoRef?.current,
       localVideoElementRef: localVideoElementRef?.current
     });
-  }, [inVoiceChannel, inVideoChannel, localVideoStreamRef, remoteVideoRef]);
+  }, [inVoiceChannel, inVideoChannel, remoteInVideoChannel, localVideoStreamRef, remoteVideoRef]);
+
+  // Test function to verify remote video element works
+  const testRemoteVideo = () => {
+    if (remoteVideoRef?.current && localVideoStreamRef?.current) {
+      console.log('Testing remote video with local stream...');
+      remoteVideoRef.current.srcObject = localVideoStreamRef.current;
+      remoteVideoRef.current.play().catch(err => {
+        console.log('Test remote video play failed:', err);
+      });
+    }
+  };
 
   return (
     <div className="video-call-container">
@@ -133,6 +155,13 @@ const VideoCall = ({
             >
               <PhoneOff size={16} />
               Leave
+            </button>
+            <button
+              onClick={testRemoteVideo}
+              className="voice-control-btn mute"
+              style={{ fontSize: '10px', padding: '4px 8px' }}
+            >
+              Test Video
             </button>
           </div>
         </div>

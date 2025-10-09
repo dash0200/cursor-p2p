@@ -91,6 +91,7 @@ export const useWebRTC = () => {
       } else if (message.type === 'video-join') {
         setRemoteInVideoChannel(true);
         addLog('Remote peer joined video channel');
+        console.log('Remote peer joined video channel - remoteVideoRef:', remoteVideoRef.current);
       } else if (message.type === 'video-leave') {
         setRemoteInVideoChannel(false);
         if (remoteVideoRef.current) {
@@ -600,6 +601,24 @@ export const useWebRTC = () => {
       addLog('Remote peer is not in voice channel');
     }
   }, [inVoiceChannel, remoteInVoiceChannel]);
+
+  // Monitor remote video channel status
+  useEffect(() => {
+    console.log('Remote video channel status changed:', {
+      remoteInVideoChannel,
+      remoteVideoRef: remoteVideoRef.current,
+      hasStream: remoteVideoRef.current?.srcObject
+    });
+    
+    if (remoteInVideoChannel && remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+      addLog('Remote video should be visible');
+      console.log('Remote video stream details:', {
+        stream: remoteVideoRef.current.srcObject,
+        videoTracks: remoteVideoRef.current.srcObject.getVideoTracks(),
+        audioTracks: remoteVideoRef.current.srcObject.getAudioTracks()
+      });
+    }
+  }, [remoteInVideoChannel, remoteVideoRef.current]);
 
   return {
     // State
