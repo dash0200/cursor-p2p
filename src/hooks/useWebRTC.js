@@ -195,6 +195,13 @@ export const useWebRTC = () => {
       const stream = e.streams[0];
       const track = e.track;
       
+      console.log('ontrack event received:', {
+        trackKind: track.kind,
+        trackId: track.id,
+        streamId: stream.id,
+        streamTracks: stream.getTracks().map(t => ({ kind: t.kind, id: t.id }))
+      });
+      
       if (track.kind === 'audio') {
         addLog('Received remote audio track');
         if (remoteAudioRef.current) {
@@ -208,6 +215,17 @@ export const useWebRTC = () => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = stream;
           addLog(`Remote video stream set. We're in video: ${inVideoChannel}, Remote in video: ${remoteInVideoChannel}`);
+          console.log('Remote video element:', remoteVideoRef.current);
+          console.log('Remote video stream:', stream);
+          
+          // Try to play the remote video
+          remoteVideoRef.current.play().catch(err => {
+            console.log('Remote video play failed:', err);
+            addLog('Remote video play failed: ' + err.message);
+          });
+        } else {
+          addLog('Warning: remoteVideoRef.current is null');
+          console.log('remoteVideoRef:', remoteVideoRef);
         }
       }
     };
@@ -338,6 +356,14 @@ export const useWebRTC = () => {
         });
       });
 
+      // Log all senders to verify tracks are added
+      const senders = pcRef.current.getSenders();
+      console.log('Current senders:', senders.map(sender => ({
+        track: sender.track?.kind,
+        trackId: sender.track?.id,
+        trackEnabled: sender.track?.enabled
+      })));
+
       setInVoiceChannel(true);
       setInVideoChannel(true);
       sendMessage({ type: 'voice-join' });
@@ -354,6 +380,16 @@ export const useWebRTC = () => {
         const offer = await pcRef.current.createOffer();
         await pcRef.current.setLocalDescription(offer);
         sendMessage({ type: 'offer', sdp: pcRef.current.localDescription });
+        
+        // Log offer details
+        console.log('Created offer with tracks:', {
+          offer: offer,
+          localDescription: pcRef.current.localDescription,
+          senders: pcRef.current.getSenders().map(s => ({
+            track: s.track?.kind,
+            trackId: s.track?.id
+          }))
+        });
       }
     } catch (err) {
       alert('Error joining voice channel: ' + err.message);

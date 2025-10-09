@@ -28,6 +28,14 @@ const VideoCall = ({
     }
   }, [localVideoStreamRef?.current, inVideoChannel]);
 
+  // Connect remote video stream to video element
+  useEffect(() => {
+    if (remoteVideoRef?.current) {
+      console.log('Remote video element available:', remoteVideoRef.current);
+      console.log('Remote video stream:', remoteVideoRef.current.srcObject);
+    }
+  }, [remoteVideoRef?.current, remoteInVideoChannel]);
+
   // Debug logging
   useEffect(() => {
     console.log('VideoCall props:', {
@@ -87,6 +95,7 @@ const VideoCall = ({
               autoPlay
               playsInline
               className="video-stream"
+              style={{ display: remoteInVideoChannel ? 'block' : 'none' }}
             />
               <div className="video-label">Remote</div>
               {!remoteInVideoChannel && (
