@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>react-app</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+      // Optional: Filter out YouTube tracking errors (not necessary)
+      const originalError = console.error;
+      console.error = function(...args) {
+        const message = args.join(' ');
+        if (message.includes('generate_204') || message.includes('play.google.com/log')) {
+          return; // Ignore YouTube tracking errors
+        }
+        originalError.apply(console, args);
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>

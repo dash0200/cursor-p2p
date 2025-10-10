@@ -49,7 +49,81 @@ export default function WebRTCManualSignal() {
       }
     } else if (message.type === 'video-file') {
       if (message.fileName && message.fileSize) {
-        webrtc.addLog(`Remote peer selected video: ${message.fileName} (${Math.round(message.fileSize / 1024 / 1024 * 100) / 100} MB)`);
+        webrtc.addLog(`Remote peer selected local video: ${message.fileName} (${Math.round(message.fileSize / 1024 / 1024 * 100) / 100} MB)`);
+        webrtc.addLog('Note: You need to select the same local video file to sync playback');
+      }
+    } else if (message.type === 'youtube-video') {
+      // Handle YouTube video from peer
+      if (message.videoId) {
+        webrtc.addLog(`Remote peer loaded YouTube video: ${message.videoId} (timestamp: ${message.timestamp || 'unknown'})`);
+        webrtc.addLog(`Current peer video: ${videoPlayer.youtubeVideoId}, New video: ${message.videoId}`);
+        
+        // Always reload the video, even if it's the same video ID
+        webrtc.addLog('Loading YouTube video for peer...');
+        videoPlayer.loadYouTubeVideo(message.videoId, message.url, true, true).then(() => {
+          webrtc.addLog('YouTube video loaded successfully for peer');
+        }).catch((error) => {
+          webrtc.addLog(`Error loading YouTube video for peer: ${error.message}`);
+        });
+      }
+    } else if (message.type === 'youtube-play') {
+      if (videoPlayer.youtubePlayerManagerRef?.current && videoPlayer.youtubePlayerManagerRef.current.isReady) {
+        videoPlayer.youtubePlayerManagerRef.current.playVideo();
+        videoPlayer.setIsPlaying(true);
+        const time = message.time !== undefined ? message.time : 0;
+        webrtc.addLog(`YouTube played by peer at ${videoPlayer.formatTime(time)}`);
+      } else {
+        // Queue the command if player isn't ready
+        videoPlayer.addPendingCommand({ type: 'play', time: message.time });
+        webrtc.addLog('YouTube player not ready, queuing play command');
+      }
+    } else if (message.type === 'youtube-pause') {
+      if (videoPlayer.youtubePlayerManagerRef?.current && videoPlayer.youtubePlayerManagerRef.current.isReady) {
+        videoPlayer.youtubePlayerManagerRef.current.pauseVideo();
+        videoPlayer.setIsPlaying(false);
+        const time = message.time !== undefined ? message.time : 0;
+        webrtc.addLog(`YouTube paused by peer at ${videoPlayer.formatTime(time)}`);
+      } else {
+        // Queue the command if player isn't ready
+        videoPlayer.addPendingCommand({ type: 'pause', time: message.time });
+        webrtc.addLog('YouTube player not ready, queuing pause command');
+      }
+    } else if (message.type === 'youtube-seek') {
+      if (videoPlayer.youtubePlayerManagerRef?.current && videoPlayer.youtubePlayerManagerRef.current.isReady && message.time !== undefined) {
+        videoPlayer.youtubePlayerManagerRef.current.seekTo(message.time, true);
+        videoPlayer.setCurrentTime(message.time);
+        webrtc.addLog(`YouTube seeked by peer to ${videoPlayer.formatTime(message.time)}`);
+      } else {
+        // Queue the command if player isn't ready
+        videoPlayer.addPendingCommand({ type: 'seek', time: message.time });
+        webrtc.addLog('YouTube player not ready, queuing seek command');
+      }
+    } else if (message.type === 'direct-video') {
+      if (message.url) {
+        webrtc.addLog(`Loading direct video from peer: ${message.url}`);
+        try {
+          // Clear all video states for seamless switching
+          videoPlayer.clearAllVideoStates();
+          
+          // Set the direct video URL
+          videoPlayer.setDirectVideoUrl(message.url);
+          
+          // Load the direct video URL
+          if (videoPlayer.videoRef.current) {
+            videoPlayer.videoRef.current.src = message.url;
+            videoPlayer.videoRef.current.onloadeddata = () => {
+              videoPlayer.setDirectVideoLoaded(true);
+              videoPlayer.setDuration(videoPlayer.videoRef.current.duration);
+              webrtc.addLog('Direct video loaded from peer');
+            };
+            videoPlayer.videoRef.current.onerror = (error) => {
+              webrtc.addLog(`Error loading direct video from peer: ${error.message || 'Unknown error'}`);
+              videoPlayer.setDirectVideoLoaded(false);
+            };
+          }
+        } catch (error) {
+          webrtc.addLog(`Error handling direct video from peer: ${error.message}`);
+        }
       }
     }
   };
@@ -90,7 +164,15 @@ export default function WebRTCManualSignal() {
           <VideoPlayer
             videoRef={videoPlayer.videoRef}
             fileInputRef={videoPlayer.fileInputRef}
+            youtubeIframeRef={videoPlayer.youtubeIframeRef}
+            youtubePlayerManagerRef={videoPlayer.youtubePlayerManagerRef}
             videoFile={videoPlayer.videoFile}
+            youtubeUrl={videoPlayer.youtubeUrl}
+            youtubeVideoId={videoPlayer.youtubeVideoId}
+            directVideoUrl={videoPlayer.directVideoUrl}
+            directVideoLoaded={videoPlayer.directVideoLoaded}
+            youtubeInputUrl={videoPlayer.youtubeInputUrl}
+            directVideoInputUrl={videoPlayer.directVideoInputUrl}
             isPlaying={videoPlayer.isPlaying}
             currentTime={videoPlayer.currentTime}
             duration={videoPlayer.duration}
@@ -98,6 +180,10 @@ export default function WebRTCManualSignal() {
             isVideoMuted={videoPlayer.isVideoMuted}
             dataChannelReady={webrtc.dataChannelRef.current?.readyState === 'open'}
             handleVideoFileSelect={videoPlayer.handleVideoFileSelect}
+            handleYoutubeUrlChange={videoPlayer.handleYoutubeUrlChange}
+            handleYoutubeSubmit={videoPlayer.handleYoutubeSubmit}
+            handleDirectVideoUrlChange={videoPlayer.handleDirectVideoUrlChange}
+            handleDirectVideoSubmit={videoPlayer.handleDirectVideoSubmit}
             togglePlayPause={videoPlayer.togglePlayPause}
             handleSeek={videoPlayer.handleSeek}
             handleVolumeChange={videoPlayer.handleVolumeChange}
@@ -130,6 +216,8 @@ export default function WebRTCManualSignal() {
           inVoiceChannel={webrtc.inVoiceChannel}
           remoteInVoiceChannel={webrtc.remoteInVoiceChannel}
           isMuted={webrtc.isMuted}
+          localVoiceActivity={webrtc.localVoiceActivity}
+          remoteVoiceActivity={webrtc.remoteVoiceActivity}
           joinVoiceChannel={webrtc.joinVoiceChannel}
           leaveVoiceChannel={webrtc.leaveVoiceChannel}
           toggleMute={webrtc.toggleMute}

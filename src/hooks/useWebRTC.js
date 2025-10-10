@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export const useWebRTC = () => {
   const [localOffer, setLocalOffer] = useState('');
@@ -9,6 +9,8 @@ export const useWebRTC = () => {
   const [inVoiceChannel, setInVoiceChannel] = useState(false);
   const [remoteInVoiceChannel, setRemoteInVoiceChannel] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [localVoiceActivity, setLocalVoiceActivity] = useState(false);
+  const [remoteVoiceActivity, setRemoteVoiceActivity] = useState(false);
   const [logs, setLogs] = useState([]);
 
   const pcRef = useRef(null);
@@ -17,19 +19,25 @@ export const useWebRTC = () => {
   const dataChannelRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const isNegotiatingRef = useRef(false);
+  const localAudioContextRef = useRef(null);
+  const localAnalyserRef = useRef(null);
+  const remoteAudioContextRef = useRef(null);
+  const remoteAnalyserRef = useRef(null);
+  const localVoiceActivityTimeoutRef = useRef(null);
+  const remoteVoiceActivityTimeoutRef = useRef(null);
 
-  const addLog = (message) => {
+  const addLog = useCallback((message) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
-  };
+  }, []);
 
-  const sendMessage = (message) => {
+  const sendMessage = useCallback((message) => {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
       if (message.type === 'video-pause' || message.type === 'video-play') {
         console.log('SENDING:', message.type, 'with data:', JSON.stringify(message));
       }
       dataChannelRef.current.send(JSON.stringify(message));
     }
-  };
+  }, []);
 
   const handleDataChannelMessage = async (data, onVideoMessage, onChatMessage) => {
     console.log('handleDataChannelMessage called with:', data);
@@ -85,7 +93,7 @@ export const useWebRTC = () => {
         addLog('Remote peer left voice channel');
       } else if (message.type === 'chat' && onChatMessage) {
         onChatMessage(message);
-      } else if (['video-play', 'video-pause', 'video-seek', 'video-file'].includes(message.type) && onVideoMessage) {
+      } else if (['video-play', 'video-pause', 'video-seek', 'video-file', 'youtube-video', 'youtube-play', 'youtube-pause', 'youtube-seek', 'direct-video'].includes(message.type) && onVideoMessage) {
         onVideoMessage(message);
       }
     } catch (err) {
@@ -143,6 +151,9 @@ export const useWebRTC = () => {
         addLog(`Remote audio stream set. We're in voice: ${inVoiceChannel}, Remote in voice: ${remoteInVoiceChannel}`);
         remoteAudioRef.current.pause();
         addLog('Remote audio paused - waiting for both peers to be in voice channel');
+        
+        // Setup voice activity detection for remote audio
+        setupRemoteVoiceActivityDetection();
       }
     };
 
@@ -268,6 +279,9 @@ export const useWebRTC = () => {
       setInVoiceChannel(true);
       sendMessage({ type: 'voice-join' });
       addLog('Joined voice channel - audio streaming');
+      
+      // Setup voice activity detection for local audio
+      setupLocalVoiceActivityDetection();
 
       if (pcRef.current && dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
         addLog('Triggering renegotiation for audio tracks');
@@ -299,6 +313,24 @@ export const useWebRTC = () => {
       remoteAudioRef.current.srcObject = null;
     }
 
+    // Cleanup voice activity detection
+    if (localAudioContextRef.current) {
+      localAudioContextRef.current.close();
+      localAudioContextRef.current = null;
+    }
+    if (remoteAudioContextRef.current) {
+      remoteAudioContextRef.current.close();
+      remoteAudioContextRef.current = null;
+    }
+    if (localVoiceActivityTimeoutRef.current) {
+      clearTimeout(localVoiceActivityTimeoutRef.current);
+    }
+    if (remoteVoiceActivityTimeoutRef.current) {
+      clearTimeout(remoteVoiceActivityTimeoutRef.current);
+    }
+    setLocalVoiceActivity(false);
+    setRemoteVoiceActivity(false);
+
     setInVoiceChannel(false);
     setIsMuted(false);
     setRemoteInVoiceChannel(false);
@@ -315,6 +347,103 @@ export const useWebRTC = () => {
       addLog(isMuted ? 'Unmuted' : 'Muted');
     }
   };
+
+  // Voice activity detection functions
+  const setupLocalVoiceActivityDetection = useCallback(() => {
+    if (!localStreamRef.current) return;
+
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(localStreamRef.current);
+      
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      microphone.connect(analyser);
+      
+      localAudioContextRef.current = audioContext;
+      localAnalyserRef.current = analyser;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const detectVoiceActivity = () => {
+        if (!localAnalyserRef.current || isMuted) {
+          setLocalVoiceActivity(false);
+          return;
+        }
+        
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        const threshold = 20; // Adjust this value to change sensitivity
+        
+        if (average > threshold) {
+          setLocalVoiceActivity(true);
+          // Clear any existing timeout
+          if (localVoiceActivityTimeoutRef.current) {
+            clearTimeout(localVoiceActivityTimeoutRef.current);
+          }
+          // Set timeout to turn off voice activity after 500ms of silence
+          localVoiceActivityTimeoutRef.current = setTimeout(() => {
+            setLocalVoiceActivity(false);
+          }, 500);
+        }
+        
+        requestAnimationFrame(detectVoiceActivity);
+      };
+      
+      detectVoiceActivity();
+    } catch (error) {
+      console.error('Error setting up local voice activity detection:', error);
+    }
+  }, [isMuted]);
+
+  const setupRemoteVoiceActivityDetection = useCallback(() => {
+    if (!remoteAudioRef.current || !remoteAudioRef.current.srcObject) return;
+
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(remoteAudioRef.current.srcObject);
+      
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(analyser);
+      
+      remoteAudioContextRef.current = audioContext;
+      remoteAnalyserRef.current = analyser;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const detectVoiceActivity = () => {
+        if (!remoteAnalyserRef.current) {
+          setRemoteVoiceActivity(false);
+          return;
+        }
+        
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        const threshold = 15; // Adjust this value to change sensitivity
+        
+        if (average > threshold) {
+          setRemoteVoiceActivity(true);
+          // Clear any existing timeout
+          if (remoteVoiceActivityTimeoutRef.current) {
+            clearTimeout(remoteVoiceActivityTimeoutRef.current);
+          }
+          // Set timeout to turn off voice activity after 500ms of silence
+          remoteVoiceActivityTimeoutRef.current = setTimeout(() => {
+            setRemoteVoiceActivity(false);
+          }, 500);
+        }
+        
+        requestAnimationFrame(detectVoiceActivity);
+      };
+      
+      detectVoiceActivity();
+    } catch (error) {
+      console.error('Error setting up remote voice activity detection:', error);
+    }
+  }, []);
 
   const forceStartRemoteAudio = () => {
     if (inVoiceChannel && remoteInVoiceChannel && remoteAudioRef.current && remoteAudioRef.current.srcObject) {
@@ -447,6 +576,8 @@ export const useWebRTC = () => {
     inVoiceChannel,
     remoteInVoiceChannel,
     isMuted,
+    localVoiceActivity,
+    remoteVoiceActivity,
     logs,
     
     // Refs

@@ -35,6 +35,13 @@
   z-index: 10;
 }
 
+/* Center connection setup when not connected */
+.webrtc-container:not(.connected) .webrtc-left {
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
 .webrtc-container.connected .webrtc-left {
   overflow: hidden;
   min-height: 0;
@@ -138,7 +145,7 @@
 }
 
 .video-select-btn:hover {
-  color: #4ade80;
+  color: #192861;
   box-shadow: 
     2px 2px 4px rgba(0, 0, 0, 0.3),
     -2px -2px 4px rgba(255, 255, 255, 0.1);
@@ -235,10 +242,10 @@
 .progress-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #4ade80, #22c55e);
+  background: linear-gradient(90deg, #2d4a8a, #3a5a9a);
   border-radius: 2px;
   transition: width 0.1s ease;
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.3);
+  box-shadow: 0 0 8px rgba(45, 74, 138, 0.3);
 }
 
 .video-time {
@@ -273,7 +280,7 @@
   appearance: none;
   width: 12px;
   height: 12px;
-  background: #4ade80;
+  background: #2d4a8a;
   border-radius: 50%;
   cursor: pointer;
   box-shadow: 0 0 4px rgba(74, 222, 128, 0.3);
@@ -282,7 +289,7 @@
 .volume-slider::-moz-range-thumb {
   width: 12px;
   height: 12px;
-  background: #4ade80;
+  background: #2d4a8a;
   border-radius: 50%;
   cursor: pointer;
   border: none;
@@ -424,7 +431,7 @@
 }
 
 .status-dot.connected {
-  background: #4ade80;
+  background: #2d4a8a;
   box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
 }
 
@@ -466,6 +473,11 @@
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 24px;
   margin-bottom: 24px;
+  justify-content: center;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 /* Connected State Layout */
@@ -551,7 +563,7 @@
 
 .neumorphic-btn.success {
   background: #1a1a1a;
-  color: #4ade80;
+  color: #192861;
   box-shadow: 
     4px 4px 8px rgba(0, 0, 0, 0.3),
     -4px -4px 8px rgba(255, 255, 255, 0.05);
@@ -812,7 +824,7 @@
 }
 
 .voice-avatar-circle.active {
-  background: #4ade80;
+  background: #2d4a8a;
   box-shadow: 
     4px 4px 8px rgba(0, 0, 0, 0.3),
     -4px -4px 8px rgba(255, 255, 255, 0.05),
@@ -857,7 +869,7 @@
 
 .audio-bar.active {
   height: 32px;
-  background: #4ade80;
+  background: #2d4a8a;
   animation: pulse 1.5s ease-in-out infinite;
   box-shadow: 
     inset 2px 2px 4px rgba(0, 0, 0, 0.3),
@@ -897,7 +909,7 @@
 
 .voice-control-btn.join {
   background: #1a1a1a;
-  color: #4ade80;
+  color: #192861;
   padding: 10px 20px;
   box-shadow: 
     3px 3px 6px rgba(0, 0, 0, 0.2),
@@ -1175,6 +1187,8 @@
   .connection-grid {
     grid-template-columns: 1fr;
     gap: 20px;
+    max-width: 500px;
+    width: 100%;
   }
   
   .video-player-wrapper {
@@ -1223,6 +1237,8 @@
   .connection-grid {
     grid-template-columns: 1fr;
     gap: 16px;
+    max-width: 400px;
+    width: 100%;
   }
   
   .webrtc-card {
@@ -1517,11 +1533,11 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(25, 40, 97, 0.1);
+  border: 1px solid rgba(25, 40, 97, 0.3);
   border-radius: 12px;
   font-size: 11px;
-  color: #22c55e;
+  color: #192861;
   font-weight: 500;
   margin-left: 8px;
 }
@@ -1529,7 +1545,7 @@
 .sync-dot {
   width: 6px;
   height: 6px;
-  background: #22c55e;
+  background: #2d4a8a;
   border-radius: 50%;
   animation: sync-pulse 2s ease-in-out infinite;
 }
@@ -1658,6 +1674,8 @@
   
   .connection-grid {
     gap: 12px;
+    max-width: 350px;
+    width: 100%;
   }
   
   .webrtc-card {
@@ -1708,22 +1726,563 @@
   }
 }
 
-/* Better focus states for accessibility */
+/* Remove focus outlines from all interactive elements */
+*:focus {
+  outline: none !important;
+}
+
+button:focus,
 .video-control-btn:focus,
 .voice-control-btn:focus,
 .neumorphic-btn:focus,
-.tab-button:focus {
-  outline: 2px solid #4f46e5;
-  outline-offset: 2px;
+.tab-button:focus,
+.copy-btn:focus,
+.youtube-submit-btn:focus,
+.youtube-close-btn:focus,
+.direct-video-submit-btn:focus,
+.direct-video-close-btn:focus {
+  outline: none !important;
 }
 
-/* Improved button active states for touch */
-@media (hover: none) and (pointer: coarse) {
-  .video-control-btn:active,
-  .voice-control-btn:active,
-  .neumorphic-btn:active,
-  .tab-button:active {
-    transform: scale(0.95);
-    transition: transform 0.1s ease;
+/* Button press/active states for all devices */
+.video-control-btn:active,
+.voice-control-btn:active,
+.neumorphic-btn:active,
+.tab-button:active,
+.copy-btn:active,
+.youtube-submit-btn:active,
+.youtube-close-btn:active,
+.direct-video-submit-btn:active,
+.direct-video-close-btn:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.3),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced press effect for neumorphic buttons */
+.neumorphic-btn:active {
+  box-shadow: 
+    inset 6px 6px 12px rgba(0, 0, 0, 0.4),
+    inset -6px -6px 12px rgba(255, 255, 255, 0.03);
+}
+
+/* Enhanced press effect for video control buttons */
+.video-control-btn:active {
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced press effect for voice control buttons */
+.voice-control-btn:active {
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced press effect for submit buttons */
+.youtube-submit-btn:active,
+.direct-video-submit-btn:active {
+  transform: scale(0.95);
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.4),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.1);
+}
+
+/* Enhanced press effect for close buttons */
+.youtube-close-btn:active,
+.direct-video-close-btn:active {
+  transform: scale(0.9);
+  box-shadow: 
+    inset 2px 2px 4px rgba(0, 0, 0, 0.3),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.1);
+}
+
+/* Enhanced press effect for copy button */
+.copy-btn:active {
+  transform: scale(0.95);
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced press effect for success buttons */
+.neumorphic-btn.success:active {
+  transform: scale(0.95) !important;
+  box-shadow: 
+    inset 6px 6px 12px rgba(0, 0, 0, 0.4),
+    inset -6px -6px 12px rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Enhanced press effect for join voice button */
+.voice-control-btn.join:active {
+  transform: scale(0.95) !important;
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Enhanced press effect for all voice control button variants */
+.voice-control-btn.mute:active,
+.voice-control-btn.leave:active {
+  transform: scale(0.95) !important;
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Comprehensive button press effect - catch all */
+button:active,
+.neumorphic-btn:active,
+.voice-control-btn:active,
+.video-control-btn:active,
+.tab-button:active {
+  transform: scale(0.95) !important;
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.3),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.05) !important;
+  transition: transform 0.1s ease !important;
+}
+
+/* YouTube Player Styles */
+.youtube-player-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.youtube-player-container:hover {
+  opacity: 0.9;
+}
+
+.youtube-player {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  border: none;
+  pointer-events: none; /* Disable iframe interactions - use custom controls */
+}
+
+/* YouTube Input Styles */
+.video-select-buttons {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.youtube-btn {
+  background: linear-gradient(145deg, #ff0000, #cc0000);
+  color: white;
+  border: none;
+}
+
+.youtube-btn:hover {
+  background: linear-gradient(145deg, #ff1a1a, #e60000);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 8px 16px rgba(255, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.youtube-input-container {
+  margin-top: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.youtube-url-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.youtube-url-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.youtube-url-input::placeholder {
+  color: rgba(224, 224, 224, 0.6);
+}
+
+.youtube-submit-btn {
+  padding: 10px 20px;
+  background: linear-gradient(145deg, #4f46e5, #3730a3);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 120px;
+}
+
+.youtube-submit-btn:hover:not(:disabled) {
+  background: linear-gradient(145deg, #5b52f0, #4338ca);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.youtube-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Direct Video Input Styles */
+.direct-video-input-container {
+  margin-top: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.direct-video-url-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.direct-video-url-input:focus {
+  outline: none;
+  border-color: #10b981;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.direct-video-url-input::placeholder {
+  color: rgba(224, 224, 224, 0.6);
+}
+
+.direct-video-submit-btn {
+  padding: 10px 20px;
+  background: linear-gradient(145deg, #10b981, #059669);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 120px;
+}
+
+.direct-video-submit-btn:hover:not(:disabled) {
+  background: linear-gradient(145deg, #059669, #047857);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.direct-video-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.youtube-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: #e0e0e0;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.youtube-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.youtube-input-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  z-index: 1000;
+  min-width: 300px;
+}
+
+.youtube-input-overlay .youtube-input-container {
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  position: relative;
+}
+
+/* Direct Video Input Styles */
+.direct-video-input-container {
+  margin-top: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.direct-video-url-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.direct-video-url-input:focus {
+  outline: none;
+  border-color: #2d4a8a;
+  box-shadow: 0 0 0 3px rgba(45, 74, 138, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.direct-video-url-input::placeholder {
+  color: rgba(224, 224, 224, 0.5);
+}
+
+.direct-video-submit-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #2d4a8a, #3a5a9a);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.direct-video-submit-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3a5a9a, #4a6aaa);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(45, 74, 138, 0.3);
+}
+
+.direct-video-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.direct-video-input-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  z-index: 1000;
+  min-width: 400px;
+}
+
+.direct-video-input-overlay .direct-video-input-container {
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  position: relative;
+}
+
+.direct-video-close-btn {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.direct-video-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+/* Active Video Type Indicators */
+.video-control-btn.active {
+  background: linear-gradient(135deg, #2d4a8a, #3a5a9a);
+  color: white;
+  box-shadow: 0 0 0 2px rgba(45, 74, 138, 0.3);
+}
+
+.video-control-btn.active:hover {
+  background: linear-gradient(135deg, #3a5a9a, #4a6aaa);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(45, 74, 138, 0.4);
+}
+
+/* YouTube Button Specific Styles */
+.video-control-btn.youtube-btn {
+  position: relative;
+}
+
+.video-control-btn.youtube-btn.active::after {
+  content: 'YT';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #2d4a8a;
+  color: white;
+  font-size: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Direct Video Button Specific Styles */
+.video-control-btn.direct-video-btn {
+  position: relative;
+}
+
+.video-control-btn.direct-video-btn.active::after {
+  content: 'Direct';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #2d4a8a;
+  color: white;
+  font-size: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Video Type Indicators */
+.video-type-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.video-type-indicator.youtube-video {
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  color: #ff0000;
+}
+
+.video-type-indicator.local-video {
+  background: rgba(45, 74, 138, 0.1);
+  border: 1px solid rgba(45, 74, 138, 0.3);
+  color: #2d4a8a;
+}
+
+.video-type-indicator.direct-video {
+  background: rgba(255, 165, 0, 0.1);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  color: #ffa500;
+}
+
+.video-type-indicator .type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* YouTube Ready Indicator */
+.youtube-ready-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #00ff00;
+  font-weight: 500;
+}
+
+.ready-dot {
+  width: 6px;
+  height: 6px;
+  background: #00ff00;
+  border-radius: 50%;
+  animation: readyPulse 2s infinite;
+}
+
+@keyframes readyPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.2);
   }
 }

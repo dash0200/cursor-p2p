@@ -9,6 +9,8 @@ const Sidebar = ({
   inVoiceChannel,
   remoteInVoiceChannel,
   isMuted,
+  localVoiceActivity,
+  remoteVoiceActivity,
   joinVoiceChannel,
   leaveVoiceChannel,
   toggleMute,
@@ -50,6 +52,8 @@ const Sidebar = ({
           inVoiceChannel={inVoiceChannel}
           remoteInVoiceChannel={remoteInVoiceChannel}
           isMuted={isMuted}
+          localVoiceActivity={localVoiceActivity}
+          remoteVoiceActivity={remoteVoiceActivity}
           joinVoiceChannel={joinVoiceChannel}
           leaveVoiceChannel={leaveVoiceChannel}
           toggleMute={toggleMute}

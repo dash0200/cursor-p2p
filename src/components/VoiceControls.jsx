@@ -5,6 +5,8 @@ const VoiceControls = ({
   inVoiceChannel,
   remoteInVoiceChannel,
   isMuted,
+  localVoiceActivity,
+  remoteVoiceActivity,
   joinVoiceChannel,
   leaveVoiceChannel,
   toggleMute
@@ -25,7 +27,7 @@ const VoiceControls = ({
             {[...Array(5)].map((_, i) => (
               <div
                 key={i}
-                className={`audio-bar ${inVoiceChannel && remoteInVoiceChannel ? 'active' : ''}`}
+                className={`audio-bar ${localVoiceActivity || remoteVoiceActivity ? 'active' : ''}`}
                 style={{ animationDelay: `${i * 0.1}s` }}
               />
             ))}
