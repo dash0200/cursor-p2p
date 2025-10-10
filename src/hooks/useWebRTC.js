@@ -128,8 +128,14 @@ export const useWebRTC = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 10, // Pre-gather ICE candidates
+      bundlePolicy: 'max-bundle', // Reduce number of transports
+      rtcpMuxPolicy: 'require' // Reduce number of ports
     });
 
     pc.onicecandidate = (e) => {
@@ -181,6 +187,12 @@ export const useWebRTC = () => {
     setIsGeneratingOffer(true);
     addLog('Creating data channel offer...');
     
+    // Log browser and performance info
+    addLog(`Browser: ${navigator.userAgent.split(' ').slice(-2).join(' ')}`);
+    addLog(`Connection: ${navigator.connection?.effectiveType || 'Unknown'}`);
+    
+    const startTime = Date.now();
+    
     try {
       const pc = createPeerConnection();
 
@@ -192,12 +204,19 @@ export const useWebRTC = () => {
       await pc.setLocalDescription(offer);
 
       addLog('Gathering ICE candidates...');
-      await new Promise(resolve => {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          addLog('ICE gathering timeout - proceeding with available candidates');
+          resolve(); // Don't fail, just proceed with what we have
+        }, 10000); // 10 second timeout
+
         if (pc.iceGatheringState === 'complete') {
+          clearTimeout(timeout);
           resolve();
         } else {
           pc.onicegatheringstatechange = () => {
             if (pc.iceGatheringState === 'complete') {
+              clearTimeout(timeout);
               resolve();
             }
           };
@@ -206,7 +225,10 @@ export const useWebRTC = () => {
 
       setLocalOffer(JSON.stringify(pc.localDescription, null, 2));
       setIsInitiator(true);
-      addLog('Offer created - send to remote peer');
+      
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      addLog(`Offer created in ${duration}ms - send to remote peer`);
     } catch (error) {
       addLog(`Error creating offer: ${error.message}`);
     } finally {
