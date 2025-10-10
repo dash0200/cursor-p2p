@@ -11,6 +11,7 @@ export const useWebRTC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [localVoiceActivity, setLocalVoiceActivity] = useState(false);
   const [remoteVoiceActivity, setRemoteVoiceActivity] = useState(false);
+  const [isGeneratingOffer, setIsGeneratingOffer] = useState(false);
   const [logs, setLogs] = useState([]);
 
   const pcRef = useRef(null);
@@ -177,30 +178,40 @@ export const useWebRTC = () => {
   };
 
   const createDataChannelOffer = async (onVideoMessage, onChatMessage) => {
+    setIsGeneratingOffer(true);
     addLog('Creating data channel offer...');
-    const pc = createPeerConnection();
+    
+    try {
+      const pc = createPeerConnection();
 
-    const dataChannel = pc.createDataChannel('signaling');
-    setupDataChannel(dataChannel, onVideoMessage, onChatMessage);
+      const dataChannel = pc.createDataChannel('signaling');
+      setupDataChannel(dataChannel, onVideoMessage, onChatMessage);
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+      addLog('Generating offer...');
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    await new Promise(resolve => {
-      if (pc.iceGatheringState === 'complete') {
-        resolve();
-      } else {
-        pc.onicegatheringstatechange = () => {
-          if (pc.iceGatheringState === 'complete') {
-            resolve();
-          }
-        };
-      }
-    });
+      addLog('Gathering ICE candidates...');
+      await new Promise(resolve => {
+        if (pc.iceGatheringState === 'complete') {
+          resolve();
+        } else {
+          pc.onicegatheringstatechange = () => {
+            if (pc.iceGatheringState === 'complete') {
+              resolve();
+            }
+          };
+        }
+      });
 
-    setLocalOffer(JSON.stringify(pc.localDescription, null, 2));
-    setIsInitiator(true);
-    addLog('Offer created - send to remote peer');
+      setLocalOffer(JSON.stringify(pc.localDescription, null, 2));
+      setIsInitiator(true);
+      addLog('Offer created - send to remote peer');
+    } catch (error) {
+      addLog(`Error creating offer: ${error.message}`);
+    } finally {
+      setIsGeneratingOffer(false);
+    }
   };
 
   const handleRemoteDescription = async (onVideoMessage, onChatMessage) => {
@@ -578,6 +589,7 @@ export const useWebRTC = () => {
     isMuted,
     localVoiceActivity,
     remoteVoiceActivity,
+    isGeneratingOffer,
     logs,
     
     // Refs

@@ -8,7 +8,8 @@ const ConnectionSetup = ({
   remoteDescription,
   setRemoteDescription,
   createDataChannelOffer,
-  handleRemoteDescription
+  handleRemoteDescription,
+  isGeneratingOffer
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -28,8 +29,16 @@ const ConnectionSetup = ({
         <button
           onClick={createDataChannelOffer}
           className="neumorphic-btn primary"
+          disabled={isGeneratingOffer}
         >
-          Create Offer
+          {isGeneratingOffer ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="loading-spinner"></div>
+              Generating Offer...
+            </div>
+          ) : (
+            'Create Offer'
+          )}
         </button>
 
         {localOffer && (

@@ -157,6 +157,7 @@ export default function WebRTCManualSignal() {
             setRemoteDescription={webrtc.setRemoteDescription}
             createDataChannelOffer={() => webrtc.createDataChannelOffer(handleVideoMessage, handleChatMessage)}
             handleRemoteDescription={() => webrtc.handleRemoteDescription(handleVideoMessage, handleChatMessage)}
+            isGeneratingOffer={webrtc.isGeneratingOffer}
           />
         )}
 

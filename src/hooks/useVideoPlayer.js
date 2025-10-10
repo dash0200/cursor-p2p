@@ -537,6 +537,18 @@ export const useVideoPlayer = (sendMessage, addLog) => {
   }, [memoizedAddLog]);
 
   const handleKeyPress = useCallback((e) => {
+    // Don't handle keyboard events if user is typing in an input field
+    const activeElement = document.activeElement;
+    const isTyping = activeElement && (
+      activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.contentEditable === 'true'
+    );
+    
+    if (isTyping) {
+      return; // Let the input handle the key press
+    }
+
     // Handle YouTube video keyboard controls
     if (youtubeVideoIdRef.current && youtubePlayerManagerRef.current?.isReady) {
       switch (e.key) {
