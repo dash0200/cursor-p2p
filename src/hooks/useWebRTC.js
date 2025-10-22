@@ -58,26 +58,44 @@ export const useWebRTC = () => {
         }
         isNegotiatingRef.current = true;
 
-        await pcRef.current.setRemoteDescription(message.sdp);
-        const answer = await pcRef.current.createAnswer();
-        await pcRef.current.setLocalDescription(answer);
+        try {
+          await pcRef.current.setRemoteDescription(message.sdp);
+          const answer = await pcRef.current.createAnswer();
+          await pcRef.current.setLocalDescription(answer);
 
-        for (const candidate of pendingCandidatesRef.current) {
-          await pcRef.current.addIceCandidate(candidate);
+          for (const candidate of pendingCandidatesRef.current) {
+            try {
+              await pcRef.current.addIceCandidate(candidate);
+            } catch (err) {
+              addLog(`Error adding pending ICE candidate: ${err.message}`);
+            }
+          }
+          pendingCandidatesRef.current = [];
+
+          sendMessage({ type: 'answer', sdp: pcRef.current.localDescription });
+          addLog('Auto-answered renegotiation offer');
+        } catch (err) {
+          addLog(`Error handling renegotiation offer: ${err.message}`);
+        } finally {
+          isNegotiatingRef.current = false;
         }
-        pendingCandidatesRef.current = [];
-
-        sendMessage({ type: 'answer', sdp: pcRef.current.localDescription });
-        isNegotiatingRef.current = false;
-        addLog('Auto-answered renegotiation offer');
       } else if (message.type === 'answer') {
-        await pcRef.current.setRemoteDescription(message.sdp);
-        isNegotiatingRef.current = false;
-        addLog('Renegotiation complete');
+        try {
+          await pcRef.current.setRemoteDescription(message.sdp);
+          addLog('Renegotiation complete');
+        } catch (err) {
+          addLog(`Error handling renegotiation answer: ${err.message}`);
+        } finally {
+          isNegotiatingRef.current = false;
+        }
       } else if (message.type === 'ice-candidate' && message.candidate) {
         if (pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
-          await pcRef.current.addIceCandidate(message.candidate);
-          addLog('Added ICE candidate');
+          try {
+            await pcRef.current.addIceCandidate(message.candidate);
+            addLog('Added ICE candidate');
+          } catch (err) {
+            addLog(`Error adding ICE candidate: ${err.message}`);
+          }
         } else {
           pendingCandidatesRef.current.push(message.candidate);
           addLog('Queued ICE candidate');
@@ -121,9 +139,22 @@ export const useWebRTC = () => {
   };
 
   const createPeerConnection = () => {
+    // Properly cleanup existing connection
     if (pcRef.current) {
       pcRef.current.close();
+      pcRef.current = null;
     }
+
+    // Reset all state
+    setConnectionState('new');
+    setIsInitiator(true);
+    setInVoiceChannel(false);
+    setRemoteInVoiceChannel(false);
+    setIsMuted(false);
+    setLocalVoiceActivity(false);
+    setRemoteVoiceActivity(false);
+    pendingCandidatesRef.current = [];
+    isNegotiatingRef.current = false;
 
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -184,6 +215,12 @@ export const useWebRTC = () => {
   };
 
   const createDataChannelOffer = async (onVideoMessage, onChatMessage) => {
+    // Prevent multiple simultaneous offer generation
+    if (isGeneratingOffer) {
+      addLog('Offer generation already in progress');
+      return;
+    }
+
     setIsGeneratingOffer(true);
     addLog('Creating data channel offer...');
     
@@ -192,6 +229,7 @@ export const useWebRTC = () => {
     addLog(`Connection: ${navigator.connection?.effectiveType || 'Unknown'}`);
     
     const startTime = Date.now();
+    let timeoutId = null;
     
     try {
       const pc = createPeerConnection();
@@ -205,18 +243,18 @@ export const useWebRTC = () => {
 
       addLog('Gathering ICE candidates...');
       await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
+        timeoutId = setTimeout(() => {
           addLog('ICE gathering timeout - proceeding with available candidates');
           resolve(); // Don't fail, just proceed with what we have
-        }, 10000); // 10 second timeout
+        }, 15000); // Increased to 15 second timeout
 
         if (pc.iceGatheringState === 'complete') {
-          clearTimeout(timeout);
+          clearTimeout(timeoutId);
           resolve();
         } else {
           pc.onicegatheringstatechange = () => {
             if (pc.iceGatheringState === 'complete') {
-              clearTimeout(timeout);
+              clearTimeout(timeoutId);
               resolve();
             }
           };
@@ -231,7 +269,13 @@ export const useWebRTC = () => {
       addLog(`Offer created in ${duration}ms - send to remote peer`);
     } catch (error) {
       addLog(`Error creating offer: ${error.message}`);
+      // Reset state on error
+      setConnectionState('new');
+      setLocalOffer('');
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       setIsGeneratingOffer(false);
     }
   };
@@ -244,40 +288,54 @@ export const useWebRTC = () => {
 
     try {
       const desc = JSON.parse(remoteDescription);
-      const pc = pcRef.current;
+      let pc = pcRef.current;
 
       if (desc.type === 'offer') {
-        if (!pc) {
-          createPeerConnection();
+        // Always create a fresh connection for offers
+        if (pc) {
+          pc.close();
         }
+        pc = createPeerConnection();
 
-        await pcRef.current.setRemoteDescription(desc);
+        await pc.setRemoteDescription(desc);
         addLog('Remote offer set');
 
-        pcRef.current.ondatachannel = (e) => {
+        pc.ondatachannel = (e) => {
           setupDataChannel(e.channel, onVideoMessage, onChatMessage);
         };
 
-        const answer = await pcRef.current.createAnswer();
-        await pcRef.current.setLocalDescription(answer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-        await new Promise(resolve => {
-          if (pcRef.current.iceGatheringState === 'complete') {
+        // Wait for ICE gathering with timeout
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            addLog('ICE gathering timeout for answer - proceeding');
+            resolve();
+          }, 10000);
+
+          if (pc.iceGatheringState === 'complete') {
+            clearTimeout(timeout);
             resolve();
           } else {
-            pcRef.current.onicegatheringstatechange = () => {
-              if (pcRef.current.iceGatheringState === 'complete') {
+            pc.onicegatheringstatechange = () => {
+              if (pc.iceGatheringState === 'complete') {
+                clearTimeout(timeout);
                 resolve();
               }
             };
           }
         });
 
-        setLocalAnswer(JSON.stringify(pcRef.current.localDescription, null, 2));
+        setLocalAnswer(JSON.stringify(pc.localDescription, null, 2));
         setIsInitiator(false);
         addLog('Answer created - send to remote peer');
       } else if (desc.type === 'answer') {
-        await pcRef.current.setRemoteDescription(desc);
+        if (!pc) {
+          addLog('No peer connection available for answer');
+          return;
+        }
+        await pc.setRemoteDescription(desc);
         addLog('Connection established! You can now join voice channel');
       }
 
@@ -285,6 +343,8 @@ export const useWebRTC = () => {
     } catch (err) {
       alert('Error processing remote description: ' + err.message);
       addLog(`Error: ${err.message}`);
+      // Reset state on error
+      setConnectionState('new');
     }
   };
 
@@ -499,6 +559,67 @@ export const useWebRTC = () => {
     }
   };
 
+  const resetConnection = () => {
+    addLog('Resetting connection...');
+    
+    // Close existing connection
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    
+    // Clear data channel
+    if (dataChannelRef.current) {
+      dataChannelRef.current.close();
+      dataChannelRef.current = null;
+    }
+    
+    // Stop local stream
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    
+    // Pause remote audio
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
+      remoteAudioRef.current.srcObject = null;
+    }
+    
+    // Reset all state
+    setConnectionState('new');
+    setIsInitiator(true);
+    setInVoiceChannel(false);
+    setRemoteInVoiceChannel(false);
+    setIsMuted(false);
+    setLocalVoiceActivity(false);
+    setRemoteVoiceActivity(false);
+    setLocalOffer('');
+    setLocalAnswer('');
+    setRemoteDescription('');
+    setIsGeneratingOffer(false);
+    pendingCandidatesRef.current = [];
+    isNegotiatingRef.current = false;
+    
+    // Cleanup voice activity detection
+    if (localAudioContextRef.current) {
+      localAudioContextRef.current.close();
+      localAudioContextRef.current = null;
+    }
+    if (remoteAudioContextRef.current) {
+      remoteAudioContextRef.current.close();
+      remoteAudioContextRef.current = null;
+    }
+    if (localVoiceActivityTimeoutRef.current) {
+      clearTimeout(localVoiceActivityTimeoutRef.current);
+    }
+    if (remoteVoiceActivityTimeoutRef.current) {
+      clearTimeout(remoteVoiceActivityTimeoutRef.current);
+    }
+    
+    addLog('Connection reset complete');
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -628,6 +749,7 @@ export const useWebRTC = () => {
     toggleMute,
     sendMessage,
     addLog,
-    handleDataChannelMessage
+    handleDataChannelMessage,
+    resetConnection
   };
 };
