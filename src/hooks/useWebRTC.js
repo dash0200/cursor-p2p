@@ -13,6 +13,7 @@ export const useWebRTC = () => {
   const [remoteVoiceActivity, setRemoteVoiceActivity] = useState(false);
   const [isGeneratingOffer, setIsGeneratingOffer] = useState(false);
   const [logs, setLogs] = useState([]);
+  const [connectionTimeout, setConnectionTimeout] = useState(null);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -26,10 +27,131 @@ export const useWebRTC = () => {
   const remoteAnalyserRef = useRef(null);
   const localVoiceActivityTimeoutRef = useRef(null);
   const remoteVoiceActivityTimeoutRef = useRef(null);
+  const connectionTimeoutRef = useRef(null);
+  const cleanupTimeoutRef = useRef(null);
+  const isCleaningUpRef = useRef(false);
+  const heartbeatIntervalRef = useRef(null);
+  const lastHeartbeatRef = useRef(null);
 
   const addLog = useCallback((message) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   }, []);
+
+  // Comprehensive cleanup function
+  const cleanupAllConnections = useCallback(() => {
+    if (isCleaningUpRef.current) return;
+    isCleaningUpRef.current = true;
+    
+    addLog('Starting comprehensive cleanup...');
+    
+    // Clear all timeouts
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+    if (cleanupTimeoutRef.current) {
+      clearTimeout(cleanupTimeoutRef.current);
+      cleanupTimeoutRef.current = null;
+    }
+    if (localVoiceActivityTimeoutRef.current) {
+      clearTimeout(localVoiceActivityTimeoutRef.current);
+      localVoiceActivityTimeoutRef.current = null;
+    }
+    if (remoteVoiceActivityTimeoutRef.current) {
+      clearTimeout(remoteVoiceActivityTimeoutRef.current);
+      remoteVoiceActivityTimeoutRef.current = null;
+    }
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+
+    // Stop local media streams
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        addLog(`Stopped ${track.kind} track`);
+      });
+      localStreamRef.current = null;
+    }
+
+    // Close audio contexts
+    if (localAudioContextRef.current) {
+      localAudioContextRef.current.close();
+      localAudioContextRef.current = null;
+    }
+    if (remoteAudioContextRef.current) {
+      remoteAudioContextRef.current.close();
+      remoteAudioContextRef.current = null;
+    }
+
+    // Close data channel
+    if (dataChannelRef.current) {
+      dataChannelRef.current.close();
+      dataChannelRef.current = null;
+    }
+
+    // Close peer connection
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+
+    // Reset remote audio
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
+      remoteAudioRef.current.srcObject = null;
+    }
+
+    // Reset all state
+    setConnectionState('new');
+    setInVoiceChannel(false);
+    setRemoteInVoiceChannel(false);
+    setIsMuted(false);
+    setLocalVoiceActivity(false);
+    setRemoteVoiceActivity(false);
+    setIsGeneratingOffer(false);
+    setLocalOffer('');
+    setLocalAnswer('');
+    setRemoteDescription('');
+    pendingCandidatesRef.current = [];
+    isNegotiatingRef.current = false;
+    
+    addLog('Cleanup completed');
+    isCleaningUpRef.current = false;
+  }, [addLog]);
+
+  // Connection state monitoring
+  const monitorConnection = useCallback(() => {
+    if (!pcRef.current) return;
+    
+    const pc = pcRef.current;
+    const state = pc.connectionState;
+    
+    addLog(`Monitoring connection state: ${state}`);
+    
+    // Set up connection timeout
+    if (state === 'connecting') {
+      connectionTimeoutRef.current = setTimeout(() => {
+        if (pcRef.current && pcRef.current.connectionState === 'connecting') {
+          addLog('Connection timeout - cleaning up');
+          cleanupAllConnections();
+        }
+      }, 30000); // 30 second timeout
+    } else if (state === 'connected') {
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
+      // Start heartbeat when connected
+      startHeartbeat();
+    } else if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+      addLog(`Connection ${state} - cleaning up`);
+      cleanupTimeoutRef.current = setTimeout(() => {
+        cleanupAllConnections();
+      }, 1000);
+    }
+  }, [addLog, cleanupAllConnections]);
 
   const sendMessage = useCallback((message) => {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
@@ -37,6 +159,41 @@ export const useWebRTC = () => {
         console.log('SENDING:', message.type, 'with data:', JSON.stringify(message));
       }
       dataChannelRef.current.send(JSON.stringify(message));
+    }
+  }, []);
+
+  // Heartbeat mechanism to detect connection health
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    
+    lastHeartbeatRef.current = Date.now();
+    
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
+        addLog('Data channel not open - stopping heartbeat');
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+        return;
+      }
+      
+      // Send heartbeat
+      sendMessage({ type: 'heartbeat', timestamp: Date.now() });
+      
+      // Check if we haven't received a heartbeat in too long
+      const timeSinceLastHeartbeat = Date.now() - lastHeartbeatRef.current;
+      if (timeSinceLastHeartbeat > 30000) { // 30 seconds
+        addLog('No heartbeat received - connection may be dead');
+        cleanupAllConnections();
+      }
+    }, 10000); // Send heartbeat every 10 seconds
+  }, [addLog, sendMessage, cleanupAllConnections]);
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
     }
   }, []);
 
@@ -92,6 +249,9 @@ export const useWebRTC = () => {
           remoteAudioRef.current.srcObject = null;
         }
         addLog('Remote peer left voice channel');
+      } else if (message.type === 'heartbeat') {
+        lastHeartbeatRef.current = Date.now();
+        // Don't log every heartbeat to avoid spam
       } else if (message.type === 'chat' && onChatMessage) {
         onChatMessage(message);
       } else if (['video-play', 'video-pause', 'video-seek', 'video-file', 'youtube-video', 'youtube-play', 'youtube-pause', 'youtube-seek', 'direct-video'].includes(message.type) && onVideoMessage) {
@@ -149,6 +309,7 @@ export const useWebRTC = () => {
     pc.onconnectionstatechange = () => {
       setConnectionState(pc.connectionState);
       addLog(`Connection state: ${pc.connectionState}`);
+      monitorConnection();
     };
 
     pc.ontrack = (e) => {
@@ -371,6 +532,12 @@ export const useWebRTC = () => {
     addLog('Left voice channel');
   };
 
+  // Reset connection function
+  const resetConnection = useCallback(() => {
+    addLog('Resetting connection...');
+    cleanupAllConnections();
+  }, [cleanupAllConnections]);
+
   const toggleMute = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(track => {
@@ -499,21 +666,67 @@ export const useWebRTC = () => {
     }
   };
 
-  // Cleanup on unmount
+  // Cleanup on unmount and page events
   useEffect(() => {
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.pause();
-        remoteAudioRef.current.srcObject = null;
-      }
-      if (pcRef.current) {
-        pcRef.current.close();
+    const handleBeforeUnload = (event) => {
+      addLog('Page unloading - cleaning up connections');
+      cleanupAllConnections();
+      // Note: We can't prevent the unload, but we try to clean up
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        addLog('Page hidden - monitoring connection');
+        // Don't immediately cleanup, just monitor
+      } else {
+        addLog('Page visible - checking connection state');
+        if (pcRef.current) {
+          monitorConnection();
+        }
       }
     };
-  }, []);
+
+    const handleOnline = () => {
+      addLog('Network online - checking connection');
+      if (pcRef.current) {
+        monitorConnection();
+      }
+    };
+
+    const handleOffline = () => {
+      addLog('Network offline - cleaning up connections');
+      cleanupAllConnections();
+    };
+
+    const handleError = (event) => {
+      addLog(`Page error detected: ${event.message || 'Unknown error'}`);
+      cleanupAllConnections();
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', (event) => {
+      addLog(`Unhandled promise rejection: ${event.reason}`);
+      cleanupAllConnections();
+    });
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleError);
+      
+      // Final cleanup
+      cleanupAllConnections();
+    };
+  }, [cleanupAllConnections, monitorConnection, addLog]);
 
   // Handle remote audio playback when voice channel state changes
   useEffect(() => {
@@ -628,6 +841,10 @@ export const useWebRTC = () => {
     toggleMute,
     sendMessage,
     addLog,
-    handleDataChannelMessage
+    handleDataChannelMessage,
+    cleanupAllConnections,
+    resetConnection,
+    startHeartbeat,
+    stopHeartbeat
   };
 };
