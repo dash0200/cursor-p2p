@@ -140,9 +140,7 @@ export default function WebRTCManualSignal() {
   useEffect(() => {
     if (logContainerRef.current) {
       requestAnimationFrame(() => {
-        if (logContainerRef.current) {
-          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-        }
+        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
       });
     }
   }, [webrtc.logs]);
@@ -160,7 +158,6 @@ export default function WebRTCManualSignal() {
             createDataChannelOffer={() => webrtc.createDataChannelOffer(handleVideoMessage, handleChatMessage)}
             handleRemoteDescription={() => webrtc.handleRemoteDescription(handleVideoMessage, handleChatMessage)}
             isGeneratingOffer={webrtc.isGeneratingOffer}
-            resetConnection={webrtc.resetConnection}
           />
         )}
 

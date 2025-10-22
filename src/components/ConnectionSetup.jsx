@@ -9,8 +9,7 @@ const ConnectionSetup = ({
   setRemoteDescription,
   createDataChannelOffer,
   handleRemoteDescription,
-  isGeneratingOffer,
-  resetConnection
+  isGeneratingOffer
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -27,30 +26,20 @@ const ConnectionSetup = ({
           Step 1: Create Connection
         </h2>
 
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-          <button
-            onClick={createDataChannelOffer}
-            className="neumorphic-btn primary"
-            disabled={isGeneratingOffer}
-          >
-            {isGeneratingOffer ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div className="loading-spinner"></div>
-                Generating Offer...
-              </div>
-            ) : (
-              'Create Offer'
-            )}
-          </button>
-          
-          <button
-            onClick={resetConnection}
-            className="neumorphic-btn danger"
-            title="Reset all connections and clear state"
-          >
-            Reset Connection
-          </button>
-        </div>
+        <button
+          onClick={createDataChannelOffer}
+          className="neumorphic-btn primary"
+          disabled={isGeneratingOffer}
+        >
+          {isGeneratingOffer ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="loading-spinner"></div>
+              Generating Offer...
+            </div>
+          ) : (
+            'Create Offer'
+          )}
+        </button>
 
         {localOffer && (
           <div style={{ marginBottom: '16px' }}>
