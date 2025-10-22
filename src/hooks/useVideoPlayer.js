@@ -741,6 +741,50 @@ export const useVideoPlayer = (sendMessage, addLog) => {
     };
   }, []);
 
+  const resetVideoPlayer = () => {
+    // Clear all video states
+    clearAllVideoStates();
+    
+    // Reset all state variables
+    setVideoFile(null);
+    setYoutubeUrl('');
+    setYoutubeVideoId(null);
+    setYoutubePlayer(null);
+    setDirectVideoUrl('');
+    setYoutubeInputUrl('');
+    setDirectVideoInputUrl('');
+    setDirectVideoLoaded(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setVolume(1);
+    setIsVideoMuted(false);
+    setPendingCommands([]);
+    setIsLoadingVideo(false);
+    
+    // Clear file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    
+    // Clean up video element
+    if (videoRef.current) {
+      videoRef.current.src = '';
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+    
+    // Clean up YouTube player
+    if (youtubePlayerManagerRef.current) {
+      try {
+        youtubePlayerManagerRef.current.destroy();
+      } catch (error) {
+        console.error('Error destroying YouTube player:', error);
+      }
+      youtubePlayerManagerRef.current = null;
+    }
+  };
+
   return {
     // State
     videoFile,
@@ -782,6 +826,7 @@ export const useVideoPlayer = (sendMessage, addLog) => {
     addPendingCommand,
     executePendingCommands,
     clearAllVideoStates,
+    resetVideoPlayer,
     togglePlayPause,
     handleSeek,
     handleVolumeChange,

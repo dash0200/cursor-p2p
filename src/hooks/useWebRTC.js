@@ -620,6 +620,10 @@ export const useWebRTC = () => {
     addLog('Connection reset complete');
   };
 
+  const resetLogs = () => {
+    setLogs([]);
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -750,6 +754,7 @@ export const useWebRTC = () => {
     sendMessage,
     addLog,
     handleDataChannelMessage,
-    resetConnection
+    resetConnection,
+    resetLogs
   };
 };

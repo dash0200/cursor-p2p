@@ -136,6 +136,19 @@ export default function WebRTCManualSignal() {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
+  const handleFullReset = () => {
+    // Only reset UI components, preserve WebRTC connection
+    webrtc.resetLogs();
+    chat.resetChat();
+    videoPlayer.resetVideoPlayer();
+    
+    // Reset UI state
+    setActiveTab('voice');
+    setIsSidebarCollapsed(false);
+    
+    webrtc.addLog('UI reset completed - connection preserved');
+  };
+
   // Auto-scroll logs container
   useEffect(() => {
     if (logContainerRef.current) {
@@ -231,6 +244,7 @@ export default function WebRTCManualSignal() {
           handleChatKeyPress={chat.handleChatKeyPress}
           logs={webrtc.logs}
           logContainerRef={logContainerRef}
+          onFullReset={handleFullReset}
         />
       )}
 

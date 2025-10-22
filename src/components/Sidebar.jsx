@@ -21,7 +21,8 @@ const Sidebar = ({
   sendChatMessage,
   handleChatKeyPress,
   logs,
-  logContainerRef
+  logContainerRef,
+  onFullReset
 }) => {
   return (
     <div className="webrtc-right">
@@ -43,6 +44,13 @@ const Sidebar = ({
           onClick={() => setActiveTab('log')}
         >
           Logs
+        </button>
+        <button
+          className="reset-button"
+          onClick={onFullReset}
+          title="Reset UI (chat, logs, video) - connection preserved"
+        >
+          🔄 Reset UI
         </button>
       </div>
 

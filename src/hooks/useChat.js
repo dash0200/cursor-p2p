@@ -36,6 +36,11 @@ export const useChat = (sendMessage) => {
     }]);
   };
 
+  const resetChat = () => {
+    setChatMessages([]);
+    setChatMessage('');
+  };
+
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -52,6 +57,7 @@ export const useChat = (sendMessage) => {
     chatContainerRef,
     sendChatMessage,
     handleChatKeyPress,
-    addChatMessage
+    addChatMessage,
+    resetChat
   };
 };
