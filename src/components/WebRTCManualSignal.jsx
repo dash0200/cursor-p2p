@@ -140,7 +140,9 @@ export default function WebRTCManualSignal() {
   useEffect(() => {
     if (logContainerRef.current) {
       requestAnimationFrame(() => {
-        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        if (logContainerRef.current) {
+          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
       });
     }
   }, [webrtc.logs]);
